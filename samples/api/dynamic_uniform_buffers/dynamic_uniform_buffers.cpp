@@ -30,6 +30,8 @@
 
 #include "benchmark_mode/benchmark_mode.h"
 
+bool use_dynamic_uniform_buffers = true;
+
 DynamicUniformBuffers::DynamicUniformBuffers()
 {
 	title = "Dynamic uniform buffers";
@@ -50,6 +52,7 @@ DynamicUniformBuffers ::~DynamicUniformBuffers()
 
 		vkDestroyPipelineLayout(get_device().get_handle(), pipeline_layout, nullptr);
 		vkDestroyDescriptorSetLayout(get_device().get_handle(), descriptor_set_layout, nullptr);
+		vkDestroyDescriptorSetLayout(get_device().get_handle(), instance_descriptor_set_layout, nullptr);
 	}
 }
 
@@ -119,10 +122,22 @@ void DynamicUniformBuffers::build_command_buffers()
 		// Render multiple objects using different model matrices by dynamically offsetting into one uniform buffer
 		for (uint32_t j = 0; j < OBJECT_INSTANCES; j++)
 		{
-			// One dynamic offset per dynamic descriptor to offset into the ubo containing all model matrices
-			uint32_t dynamic_offset = j * static_cast<uint32_t>(dynamic_alignment);
-			// Bind the descriptor set for rendering a mesh using the dynamic offset
-			vkCmdBindDescriptorSets(draw_cmd_buffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout, 0, 1, &descriptor_set, 1, &dynamic_offset);
+			if (use_dynamic_uniform_buffers)
+			{
+				// One dynamic offset per dynamic descriptor to offset into the ubo containing all model matrices
+				uint32_t dynamic_offset = j * static_cast<uint32_t>(dynamic_alignment);
+				// Bind the descriptor set for rendering a mesh using the dynamic offset
+				vkCmdBindDescriptorSets(draw_cmd_buffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout, 0, 1, &descriptor_set, 1, &dynamic_offset);
+			}
+			else
+			{
+				// One dynamic offset per dynamic descriptor to offset into the ubo containing all model matrices
+				uint32_t dynamic_offset = j * static_cast<uint32_t>(dynamic_alignment);
+				// Bind the descriptor set for rendering a mesh using the dynamic offset
+				vkCmdBindDescriptorSets(draw_cmd_buffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout, 0, 1, &descriptor_set, 0, nullptr);
+
+				vkCmdBindDescriptorSets(draw_cmd_buffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout, 1, 1, &instance_descriptor_set[j], 0, nullptr);
+			}
 
 			vkCmdDrawIndexed(draw_cmd_buffers[i], index_count, 1, 0, 0, 0);
 		}
@@ -229,37 +244,75 @@ void DynamicUniformBuffers::setup_descriptor_pool()
 	std::vector<VkDescriptorPoolSize> pool_sizes =
 	    {
 	        vkb::initializers::descriptor_pool_size(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1),
-	        vkb::initializers::descriptor_pool_size(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1),
+	        vkb::initializers::descriptor_pool_size(use_dynamic_uniform_buffers ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC : VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1 + OBJECT_INSTANCES),
 	        vkb::initializers::descriptor_pool_size(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1)};
 
 	VkDescriptorPoolCreateInfo descriptor_pool_create_info =
 	    vkb::initializers::descriptor_pool_create_info(
 	        static_cast<uint32_t>(pool_sizes.size()),
 	        pool_sizes.data(),
-	        2);
+	        2  + OBJECT_INSTANCES);
 
 	VK_CHECK(vkCreateDescriptorPool(get_device().get_handle(), &descriptor_pool_create_info, nullptr, &descriptor_pool));
 }
 
 void DynamicUniformBuffers::setup_descriptor_set_layout()
 {
-	std::vector<VkDescriptorSetLayoutBinding> set_layout_bindings =
-	    {
-	        vkb::initializers::descriptor_set_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT, 0),
-	        vkb::initializers::descriptor_set_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, VK_SHADER_STAGE_VERTEX_BIT, 1),
-	        vkb::initializers::descriptor_set_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 2)};
+	VkPipelineLayoutCreateInfo pipeline_layout_create_info;
+	
+	if (use_dynamic_uniform_buffers)
+	{
+		std::vector<VkDescriptorSetLayoutBinding> set_layout_bindings =
+		{
+			vkb::initializers::descriptor_set_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT, 0),
+			vkb::initializers::descriptor_set_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, VK_SHADER_STAGE_VERTEX_BIT, 1),
+			vkb::initializers::descriptor_set_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 2)};
 
-	VkDescriptorSetLayoutCreateInfo descriptor_layout =
-	    vkb::initializers::descriptor_set_layout_create_info(
-	        set_layout_bindings.data(),
-	        static_cast<uint32_t>(set_layout_bindings.size()));
+		VkDescriptorSetLayoutCreateInfo descriptor_layout =
+			vkb::initializers::descriptor_set_layout_create_info(
+				set_layout_bindings.data(),
+				static_cast<uint32_t>(set_layout_bindings.size()));
 
-	VK_CHECK(vkCreateDescriptorSetLayout(get_device().get_handle(), &descriptor_layout, nullptr, &descriptor_set_layout));
+		VK_CHECK(vkCreateDescriptorSetLayout(get_device().get_handle(), &descriptor_layout, nullptr, &descriptor_set_layout));
 
-	VkPipelineLayoutCreateInfo pipeline_layout_create_info =
-	    vkb::initializers::pipeline_layout_create_info(
-	        &descriptor_set_layout,
-	        1);
+		pipeline_layout_create_info =
+			vkb::initializers::pipeline_layout_create_info(
+				&descriptor_set_layout,
+				1);
+	}
+	else
+	{
+		std::vector<VkDescriptorSetLayoutBinding> set_layout_bindings =
+		{
+			vkb::initializers::descriptor_set_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT, 0),
+			vkb::initializers::descriptor_set_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 2)
+		};
+
+		VkDescriptorSetLayoutCreateInfo descriptor_layout =
+			vkb::initializers::descriptor_set_layout_create_info(
+				set_layout_bindings.data(),
+				static_cast<uint32_t>(set_layout_bindings.size()));
+
+		VK_CHECK(vkCreateDescriptorSetLayout(get_device().get_handle(), &descriptor_layout, nullptr, &descriptor_set_layout));
+
+		std::vector<VkDescriptorSetLayoutBinding> set_instance_layout_bindings =
+		{
+			vkb::initializers::descriptor_set_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT, 1),
+		};
+
+		VkDescriptorSetLayoutCreateInfo descriptor_instance_layout =
+			vkb::initializers::descriptor_set_layout_create_info(
+				set_instance_layout_bindings.data(),
+				static_cast<uint32_t>(set_instance_layout_bindings.size()));
+
+		VK_CHECK(vkCreateDescriptorSetLayout(get_device().get_handle(), &descriptor_instance_layout, nullptr, &instance_descriptor_set_layout));
+
+		VkDescriptorSetLayout set_layout[2] = {descriptor_set_layout, instance_descriptor_set_layout};
+		pipeline_layout_create_info =
+			vkb::initializers::pipeline_layout_create_info(
+				set_layout,
+				2);
+	}
 
 	VK_CHECK(vkCreatePipelineLayout(get_device().get_handle(), &pipeline_layout_create_info, nullptr, &pipeline_layout));
 }
@@ -271,22 +324,50 @@ void DynamicUniformBuffers::setup_descriptor_set()
 	        descriptor_pool,
 	        &descriptor_set_layout,
 	        1);
-
+	
 	VK_CHECK(vkAllocateDescriptorSets(get_device().get_handle(), &alloc_info, &descriptor_set));
+	
+	if (use_dynamic_uniform_buffers)
+	{
+		VkDescriptorBufferInfo view_buffer_descriptor = create_descriptor(*uniform_buffers.view);
 
-	VkDescriptorBufferInfo view_buffer_descriptor = create_descriptor(*uniform_buffers.view);
+		// Pass the  actual dynamic alignment as the descriptor's size
+		VkDescriptorBufferInfo dynamic_buffer_descriptor = create_descriptor(*uniform_buffers.dynamic, dynamic_alignment);
 
-	// Pass the  actual dynamic alignment as the descriptor's size
-	VkDescriptorBufferInfo dynamic_buffer_descriptor = create_descriptor(*uniform_buffers.dynamic, dynamic_alignment);
+		std::vector<VkWriteDescriptorSet> write_descriptor_sets = {
+			// Binding 0 : Projection/View matrix uniform buffer
+			vkb::initializers::write_descriptor_set(descriptor_set, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, &view_buffer_descriptor),
+			// Binding 1 : Instance matrix as dynamic uniform buffer
+			vkb::initializers::write_descriptor_set(descriptor_set, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1, &dynamic_buffer_descriptor),
+		};
 
-	std::vector<VkWriteDescriptorSet> write_descriptor_sets = {
-	    // Binding 0 : Projection/View matrix uniform buffer
-	    vkb::initializers::write_descriptor_set(descriptor_set, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, &view_buffer_descriptor),
-	    // Binding 1 : Instance matrix as dynamic uniform buffer
-	    vkb::initializers::write_descriptor_set(descriptor_set, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1, &dynamic_buffer_descriptor),
-	};
+		vkUpdateDescriptorSets(get_device().get_handle(), static_cast<uint32_t>(write_descriptor_sets.size()), write_descriptor_sets.data(), 0, NULL);
+	}
+	else
+	{
+		std::vector<VkWriteDescriptorSet> write_descriptor_sets;
+		
+		VkDescriptorBufferInfo view_buffer_descriptor = create_descriptor(*uniform_buffers.view);
+		// Binding 0 : Projection/View matrix uniform buffer
+		write_descriptor_sets.emplace_back(vkb::initializers::write_descriptor_set(descriptor_set, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, &view_buffer_descriptor));
 
-	vkUpdateDescriptorSets(get_device().get_handle(), static_cast<uint32_t>(write_descriptor_sets.size()), write_descriptor_sets.data(), 0, NULL);
+		VkDescriptorSetAllocateInfo instance_alloc_info =
+		vkb::initializers::descriptor_set_allocate_info(
+			descriptor_pool,
+			&instance_descriptor_set_layout,
+			1);
+
+		VkDescriptorBufferInfo dynamic_buffer_descriptor[OBJECT_INSTANCES];
+		for (int i = 0; i < OBJECT_INSTANCES; ++i)
+		{
+			VK_CHECK(vkAllocateDescriptorSets(get_device().get_handle(), &instance_alloc_info, &instance_descriptor_set[i]));
+			
+			dynamic_buffer_descriptor[i] = create_descriptor(*uniform_buffers.dynamic, dynamic_alignment, i * dynamic_alignment);
+			write_descriptor_sets.emplace_back(vkb::initializers::write_descriptor_set(instance_descriptor_set[i], VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, &dynamic_buffer_descriptor[i]));
+		}
+
+		vkUpdateDescriptorSets(get_device().get_handle(), static_cast<uint32_t>(write_descriptor_sets.size()), write_descriptor_sets.data(), 0, NULL);
+	}
 }
 
 void DynamicUniformBuffers::prepare_pipelines()
@@ -384,6 +465,9 @@ void DynamicUniformBuffers::prepare_uniform_buffers()
 	// Allocate data for the dynamic uniform buffer object
 	// We allocate this manually as the alignment of the offset differs between GPUs
 
+	// dynamic_alignment为刚好大于sizeof(glm::mat4)且满足minUboAlignment倍数的大小的值。
+	// vkCmdBindDescriptorSets的时候，i*dynamic_alignment作为pDynamicOffsets。
+	
 	// Calculate required alignment based on minimum device offset alignment
 	size_t min_ubo_alignment = static_cast<size_t>(get_device().get_gpu().get_properties().limits.minUniformBufferOffsetAlignment);
 	dynamic_alignment        = sizeof(glm::mat4);
@@ -394,7 +478,7 @@ void DynamicUniformBuffers::prepare_uniform_buffers()
 
 	size_t buffer_size = OBJECT_INSTANCES * dynamic_alignment;
 
-	ubo_data_dynamic.model = static_cast<glm::mat4 *>(aligned_alloc(buffer_size, dynamic_alignment));
+	ubo_data_dynamic.model = static_cast<glm::mat4 *>(aligned_alloc(buffer_size, dynamic_alignment)); // 分配buffer的时候也需要对齐到dynamic_alignment边界
 	assert(ubo_data_dynamic.model);
 
 	std::cout << "minUniformBufferOffsetAlignment = " << min_ubo_alignment << std::endl;

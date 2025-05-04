@@ -25,7 +25,7 @@ layout (binding = 0) uniform UboView
 	mat4 view;
 } uboView;
 
-layout (binding = 1) uniform UboInstance 
+layout (set = 0, binding = 1) uniform UboInstance 
 {
 	mat4 model; 
 } uboInstance;

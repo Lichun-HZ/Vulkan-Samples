@@ -77,6 +77,9 @@ class DynamicUniformBuffers : public ApiVulkanSample
 	VkDescriptorSet       descriptor_set;
 	VkDescriptorSetLayout descriptor_set_layout;
 
+	VkDescriptorSet       instance_descriptor_set[OBJECT_INSTANCES];
+	VkDescriptorSetLayout instance_descriptor_set_layout;
+
 	float animation_timer = 0.0f;
 
 	size_t dynamic_alignment = 0;
