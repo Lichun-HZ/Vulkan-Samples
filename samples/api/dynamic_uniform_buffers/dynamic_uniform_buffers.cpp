@@ -119,6 +119,11 @@ void DynamicUniformBuffers::build_command_buffers()
 		vkCmdBindVertexBuffers(draw_cmd_buffers[i], 0, 1, vertex_buffer->get(), offsets);
 		vkCmdBindIndexBuffer(draw_cmd_buffers[i], index_buffer->get_handle(), 0, VK_INDEX_TYPE_UINT32);
 
+		if (!use_dynamic_uniform_buffers)
+		{
+			vkCmdBindDescriptorSets(draw_cmd_buffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout, 0, 1, &descriptor_set, 0, nullptr);
+		}
+
 		// Render multiple objects using different model matrices by dynamically offsetting into one uniform buffer
 		for (uint32_t j = 0; j < OBJECT_INSTANCES; j++)
 		{
@@ -131,11 +136,6 @@ void DynamicUniformBuffers::build_command_buffers()
 			}
 			else
 			{
-				// One dynamic offset per dynamic descriptor to offset into the ubo containing all model matrices
-				uint32_t dynamic_offset = j * static_cast<uint32_t>(dynamic_alignment);
-				// Bind the descriptor set for rendering a mesh using the dynamic offset
-				vkCmdBindDescriptorSets(draw_cmd_buffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout, 0, 1, &descriptor_set, 0, nullptr);
-
 				vkCmdBindDescriptorSets(draw_cmd_buffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout, 1, 1, &instance_descriptor_set[j], 0, nullptr);
 			}
 
