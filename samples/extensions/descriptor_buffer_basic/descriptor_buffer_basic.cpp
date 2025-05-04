@@ -195,7 +195,7 @@ void DescriptorBufferBasic::setup_descriptor_set_layout()
 	set_layout_binding = vkb::initializers::descriptor_set_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 0);
 	VK_CHECK(vkCreateDescriptorSetLayout(get_device().get_handle(), &descriptor_layout_create_info, nullptr, &image_binding_descriptor.layout));
 
-	// Create a pipeline layout using set 0 = Camera UBO, set 1 = Model UBO and set 2 = Model combined image
+	// Create a pipeline layout using set 0 = Camera UBO(Vertex), set 1 = Model UBO(Vertex) and set 2 = Model combined image(Fragment)
 	const std::array<VkDescriptorSetLayout, 3> descriptor_set_layouts = {uniform_binding_descriptor.layout, uniform_binding_descriptor.layout, image_binding_descriptor.layout};
 
 	VkPipelineLayoutCreateInfo pipeline_layout_create_info = vkb::initializers::pipeline_layout_create_info(descriptor_set_layouts.data(), static_cast<uint32_t>(descriptor_set_layouts.size()));
@@ -240,6 +240,7 @@ void DescriptorBufferBasic::prepare_pipelines()
 
 	std::vector<VkDynamicState> dynamic_state_enables = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
 
+	// 允许Viewport和Scissor通过cmd动态设置。
 	VkPipelineDynamicStateCreateInfo dynamic_state =
 	    vkb::initializers::pipeline_dynamic_state_create_info(dynamic_state_enables);
 
@@ -268,6 +269,7 @@ void DescriptorBufferBasic::prepare_pipelines()
 	pipeline_create_info.pDepthStencilState           = &depth_stencil_state;
 	pipeline_create_info.pDynamicState                = &dynamic_state;
 
+	// 要使用Descriptor Buffer，pipeline创建时flag必须要有VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT标志。
 	// We need to set this flag to let the implementation know that this pipeline uses descriptor buffers
 	pipeline_create_info.flags = VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
 
@@ -284,12 +286,14 @@ void DescriptorBufferBasic::prepare_pipelines()
 // This function creates the descriptor buffers and puts the descriptors into those buffers, so they can be used during command buffer creation
 void DescriptorBufferBasic::prepare_descriptor_buffer()
 {
+	// 这个Descriptor Buffer中会放三个uniform_binding_descriptor.layout的Descriptors，一个作为全局的Camera UBO，另外两个作为每个Cube独立的Model UBO
 	// This buffer will contain resource descriptors for all the uniform buffers (one per cube and one with global matrices)
 	uniform_binding_descriptor.buffer = std::make_unique<vkb::core::BufferC>(get_device(),
 	                                                                         (static_cast<uint32_t>(cubes.size()) + 1) * uniform_binding_descriptor.size,
 	                                                                         VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
 	                                                                         VMA_MEMORY_USAGE_CPU_TO_GPU);
 
+	// 每个Cube一个独立的Combine Image Sampler的Descriptor
 	// Samplers and combined images need to be stored in a separate buffer due to different flags (VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT) (one image per cube)
 	image_binding_descriptor.buffer = std::make_unique<vkb::core::BufferC>(get_device(),
 	                                                                       static_cast<uint32_t>(cubes.size()) * image_binding_descriptor.size,
@@ -307,7 +311,7 @@ void DescriptorBufferBasic::prepare_descriptor_buffer()
 
 		VkDescriptorGetInfoEXT image_descriptor_info{VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT};
 		image_descriptor_info.type                       = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-		image_descriptor_info.data.pCombinedImageSampler = &image_descriptor;
+		image_descriptor_info.data.pCombinedImageSampler = &image_descriptor;  // 写入buffer的image_descriptor
 
 		// Note: we can just write combined image sampler descriptors back-to-back in the buffer here
 		// regardless of whether descriptor_buffer_properties.combinedImageSamplerDescriptorSingleArray is true or
@@ -316,13 +320,14 @@ void DescriptorBufferBasic::prepare_descriptor_buffer()
 		// combinedImageSamplerDescriptorSingleArray property and separate the image descriptor part from the
 		// sampler descriptor part. We would place all the image descriptors first, followed by all the samplers.
 
+		// 注意上面的注释，真实情况会复杂一点，需要判断shader中写的是不是array
 		vkGetDescriptorEXT(get_device().get_handle(), &image_descriptor_info, descriptor_buffer_properties.combinedImageSamplerDescriptorSize, image_descriptor_buf_ptr + i * image_binding_descriptor.size + image_binding_descriptor.offset);
 	}
 
 	// For uniform buffers we only need to put their buffer device addresses into the descriptor buffers
 	char *uniform_descriptor_buf_ptr = (char *) uniform_binding_descriptor.buffer->get_data();
 
-	// Global matrices uniform buffer
+	// Global matrices uniform buffer. 写入全局的Camera UBO Descriptor信息
 	VkDescriptorAddressInfoEXT addr_info = {VK_STRUCTURE_TYPE_DESCRIPTOR_ADDRESS_INFO_EXT};
 	addr_info.address                    = uniform_buffers.scene->get_device_address();
 	addr_info.range                      = uniform_buffers.scene->get_size();
@@ -333,7 +338,7 @@ void DescriptorBufferBasic::prepare_descriptor_buffer()
 	buffer_descriptor_info.data.pUniformBuffer = &addr_info;
 	vkGetDescriptorEXT(get_device().get_handle(), &buffer_descriptor_info, descriptor_buffer_properties.uniformBufferDescriptorSize, uniform_descriptor_buf_ptr);
 
-	// Per-cube uniform buffers
+	// Per-cube uniform buffers. 写入每个Cube的Model UBO Descriptor信息
 	// We use pointers to offset and align the data we put into the descriptor buffers
 	for (size_t i = 0; i < cubes.size(); i++)
 	{
@@ -343,6 +348,7 @@ void DescriptorBufferBasic::prepare_descriptor_buffer()
 		cube_addr_info.format                     = VK_FORMAT_UNDEFINED;
 
 		buffer_descriptor_info.data.pUniformBuffer = &cube_addr_info;
+		// 注意偏移的计算，DescriptorBuffer中Descriptor的存放还是按照DescriptorSet为组存放的，因为之后vkCmdSetDescriptorBufferOffsetsEXT是一个DescriptorSet一个偏移值。
 		vkGetDescriptorEXT(get_device().get_handle(), &buffer_descriptor_info, descriptor_buffer_properties.uniformBufferDescriptorSize, uniform_descriptor_buf_ptr + (i + 1) * uniform_binding_descriptor.size + uniform_binding_descriptor.offset);
 	}
 }
@@ -461,11 +467,16 @@ void DescriptorBufferBasic::render(float delta_time)
 	{
 		return;
 	}
+	
 	draw();
+
+	// 如果开启动画，则每帧更新Cube的旋转，upload到cube的uniform buffer中。
 	if (animate)
 	{
 		update_cube_uniform_buffers(delta_time);
 	}
+
+	// 如果相机更新了，更新camera ubo
 	if (camera.updated)
 	{
 		update_uniform_buffers();

@@ -34,18 +34,18 @@ class DescriptorBufferBasic : public ApiVulkanSample
 
 	struct DescriptorData
 	{
-		VkDescriptorSetLayout               layout{VK_NULL_HANDLE};
-		std::unique_ptr<vkb::core::BufferC> buffer;
-		VkDeviceSize                        size;
-		VkDeviceSize                        offset;
+		VkDescriptorSetLayout               layout{VK_NULL_HANDLE}; // 即使使用DescriptorBuffer，DescriptorSetLayout还是需要的
+		std::unique_ptr<vkb::core::BufferC> buffer;                 // Descriptor Buffer
+		VkDeviceSize                        size;                   // 通过vkGetDescriptorSetLayoutSizeEXT获取的上面layout的size，并且是descriptorBufferOffsetAlignment的整数倍
+		VkDeviceSize                        offset;                 // DescriptorSetLayout中binding 0的offset
 	};
-	DescriptorData uniform_binding_descriptor;
-	DescriptorData image_binding_descriptor;
+	DescriptorData uniform_binding_descriptor; // layout为一个UniformBuffer，ShaderStage为Vertex
+	DescriptorData image_binding_descriptor;   // layout为一个Combine Image Sampler，ShaderStage为Fragment
 
 	struct Cube
 	{
-		Texture                             texture;
-		std::unique_ptr<vkb::core::BufferC> uniform_buffer;
+		Texture                             texture;        // 每个Cube的texture
+		std::unique_ptr<vkb::core::BufferC> uniform_buffer; // 每个Cube的UBO
 		glm::vec3                           rotation;
 		glm::mat4                           model_mat;
 	};
@@ -68,6 +68,7 @@ class DescriptorBufferBasic : public ApiVulkanSample
 	} ubo_scene;
 
 	VkPipeline       pipeline{VK_NULL_HANDLE};
+	// 包含三个DescriptorSetLayout，set 0 = Camera UBO(Vertex), set 1 = Model UBO(Vertex) and set 2 = Model combined image(Fragment)
 	VkPipelineLayout pipeline_layout{VK_NULL_HANDLE};
 
 	DescriptorBufferBasic();
