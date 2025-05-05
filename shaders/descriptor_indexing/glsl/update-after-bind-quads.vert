@@ -33,6 +33,7 @@ void main()
     float sin_phase = sin(registers.phase);
     local_offset = mat2(cos_phase, -sin_phase, sin_phase, cos_phase) * (local_offset - 0.5);
 
+    // vkCmdDraw(cmd, 4, 1, 0, i); 每次渲染的时候gl_InstanceIndex = i
     // To keep the sample as simple as possible, use gl_InstanceIndex to move the quads around on screen.
     int instance_x = gl_InstanceIndex % 8 + 8;
     int instance_y = gl_InstanceIndex / 8;

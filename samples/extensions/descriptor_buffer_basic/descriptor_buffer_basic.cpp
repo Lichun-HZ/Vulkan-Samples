@@ -288,17 +288,21 @@ void DescriptorBufferBasic::prepare_descriptor_buffer()
 {
 	// 这个Descriptor Buffer中会放三个uniform_binding_descriptor.layout的Descriptors，一个作为全局的Camera UBO，另外两个作为每个Cube独立的Model UBO
 	// This buffer will contain resource descriptors for all the uniform buffers (one per cube and one with global matrices)
-	uniform_binding_descriptor.buffer = std::make_unique<vkb::core::BufferC>(get_device(),
-	                                                                         (static_cast<uint32_t>(cubes.size()) + 1) * uniform_binding_descriptor.size,
-	                                                                         VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-	                                                                         VMA_MEMORY_USAGE_CPU_TO_GPU);
+	uniform_binding_descriptor.buffer = std::make_unique<vkb::core::BufferC>(
+		get_device(),
+	     (static_cast<uint32_t>(cubes.size()) + 1) * uniform_binding_descriptor.size,
+	     // 普通Descriptor buffer，且需要使用其device address
+	     VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+	     VMA_MEMORY_USAGE_CPU_TO_GPU);
 
 	// 每个Cube一个独立的Combine Image Sampler的Descriptor
 	// Samplers and combined images need to be stored in a separate buffer due to different flags (VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT) (one image per cube)
-	image_binding_descriptor.buffer = std::make_unique<vkb::core::BufferC>(get_device(),
-	                                                                       static_cast<uint32_t>(cubes.size()) * image_binding_descriptor.size,
-	                                                                       VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT | VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-	                                                                       VMA_MEMORY_USAGE_CPU_TO_GPU);
+	image_binding_descriptor.buffer = std::make_unique<vkb::core::BufferC>(
+		get_device(),
+       static_cast<uint32_t>(cubes.size()) * image_binding_descriptor.size,
+       // 用于Sampler的Descriptor buffer，且需要使用其device address
+       VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT | VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+       VMA_MEMORY_USAGE_CPU_TO_GPU);
 
 	// Put the descriptors into the above buffers
 
@@ -355,6 +359,9 @@ void DescriptorBufferBasic::prepare_descriptor_buffer()
 
 void DescriptorBufferBasic::prepare_uniform_buffers()
 {
+	// Uniform buffer如果是通过Descriptor Set方式进行绑定，则不需要device address，不用设置VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT标志，
+	// 但如果通过Descriptor Buffer方式进行绑定，就需要device address，需要设置VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT标志。
+	
 	// Vertex shader scene uniform buffer block
 	uniform_buffers.scene = std::make_unique<vkb::core::BufferC>(get_device(),
 	                                                             sizeof(UboScene),

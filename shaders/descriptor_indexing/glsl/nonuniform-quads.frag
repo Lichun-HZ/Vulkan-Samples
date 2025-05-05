@@ -64,6 +64,11 @@ void main()
         ...
     */
 
+    // 如果 Shader 中 Index 是 Non-Uniform 的，则必须加上 NonUniformResourceIndex（HLSL）或 nonuniformEXT（GLSL）限定符，
+    // 这是由于在 GPU 中 Shader 执行在不同的 thread 上（warp\wavefront），对于 Uniform Index 在所有 warp\wavefront 上是一致的，
+    // 而使用 None Uniform Index 本质上则是属于离散的，对于不同的 warp\wavefront 都有可能不同，当用于索引数组时，如果不加限定符，
+    // 会导致索引到错误的资源，从而导致不确定的渲染结果。
+    
     // sampler2D is such a constructor, so we must add nonuniformEXT afterwards.
     out_frag_color = texture(nonuniformEXT(sampler2D(Textures[in_texture_index], ImmutableSampler)), in_uv);
     // For all other use cases of nonuniformEXT however, we can write code like:

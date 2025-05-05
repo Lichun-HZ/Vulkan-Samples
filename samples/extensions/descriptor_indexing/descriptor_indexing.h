@@ -38,17 +38,19 @@ class DescriptorIndexing : public ApiVulkanSample
 	void create_immutable_sampler_descriptor_set();
 	void create_pipelines();
 
+	// 支持update_after_bind Descriptor
 	struct DescriptorHeap
 	{
-		VkDescriptorSetLayout set_layout{};
+		VkDescriptorSetLayout set_layout{};                       // fragment, binding 0, Sampled Image
 		VkDescriptorPool      descriptor_pool{};
-		VkDescriptorSet       descriptor_set_update_after_bind{};
-		VkDescriptorSet       descriptor_set_nonuniform{};
+		VkDescriptorSet       descriptor_set_update_after_bind{}; // 2048个Descriptor，用于Update after bind
+		VkDescriptorSet       descriptor_set_nonuniform{};        // 64个Descriptor，用于non uniform index
 	} descriptors;
 
+	// 普通Descriptor
 	struct ImmutableSampler
 	{
-		VkSampler             sampler{};
+		VkSampler             sampler{};                          // fragment, binding 0, Sampler
 		VkDescriptorSetLayout set_layout{};
 		VkDescriptorPool      descriptor_pool{};
 		VkDescriptorSet       descriptor_set{};
@@ -56,9 +58,10 @@ class DescriptorIndexing : public ApiVulkanSample
 
 	struct Pipelines
 	{
-		VkPipelineLayout pipeline_layout{};
-		VkPipeline       update_after_bind{};
-		VkPipeline       non_uniform_indexing{};
+		VkPipelineLayout pipeline_layout{};      // set 0: descriptors.set_layout; set 1: sampler.set_layout
+		// 两个pipeline其他都相同，只是使用不同的shader
+		VkPipeline       update_after_bind{};    // "update-after-bind-quads.vert", "update-after-bind-quads.frag"
+		VkPipeline       non_uniform_indexing{}; // "nonuniform-quads.vert", "nonuniform-quads.frag"
 	} pipelines;
 
 	struct TestImage

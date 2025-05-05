@@ -126,6 +126,8 @@ void DescriptorIndexing::render(float delta_time)
 	vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.pipeline_layout, 1, 1, &sampler.descriptor_set, 0, nullptr);
 	vkCmdSetViewport(cmd, 0, 1, &viewport);
 	vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+	// 使用non_uniform_indexing pipeline渲染64个方形，使用了instancing，没有使用instance的Vertex buffer，因为位置是用gl_InstanceIndex在shader中计算出来的。
 	vkCmdDraw(cmd, 4, NumDescriptorsNonUniform, 0, 0);
 
 	// The update-after-bind style, i.e. "streamed" descriptors. We bind the descriptor set once, and update descriptors as we go.
@@ -134,6 +136,7 @@ void DescriptorIndexing::render(float delta_time)
 	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.update_after_bind);
 	vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.pipeline_layout, 0, 1, &descriptors.descriptor_set_update_after_bind, 0, nullptr);
 
+	// vkCmdBindDescriptorSets后可以再对descriptor_set_update_after_bind进行update
 	for (unsigned i = 0; i < NumDescriptorsNonUniform; i++)
 	{
 		VkDescriptorImageInfo image_info = vkb::initializers::descriptor_image_info(VK_NULL_HANDLE, test_images[i].image_view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
@@ -142,10 +145,14 @@ void DescriptorIndexing::render(float delta_time)
 		// One way we can use VK_EXT_descriptor_indexing is to treat the update-after-bind descriptor set as a ring buffer where we write descriptors,
 		// and we use push constants as a way to index into the "bindless" descriptor set.
 		write.dstArrayElement = descriptor_offset;
+		// 设置fragment的push constant
 		vkCmdPushConstants(cmd, pipelines.pipeline_layout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(uint32_t), sizeof(uint32_t), &descriptor_offset);
 		descriptor_offset = (descriptor_offset + 1) % NumDescriptorsStreaming;
+
+		// 对DescriptorSet中binding 0中descriptor_offset索引处的Descriptor进行update
 		vkUpdateDescriptorSets(get_device().get_handle(), 1, &write, 0, nullptr);
 
+		// 这里没有使用instancing，但vkCmdDraw的firstInstance设置为了i，这样，每次渲染，gl_InstanceIndex = i, 也可以在VS中利用gl_InstanceIndex来设置不同的位置。
 		// We can use base instance as a way to offset gl_InstanceIndex in a shader.
 		// This can also be a nice way to pass down an offset for bindless purposes in vertex shaders that does not consume a push constant.
 		// In this case however, we only use the instance offset to place the textures where we expect
@@ -301,6 +308,7 @@ void DescriptorIndexing::create_pipelines()
 	VkDescriptorSetLayout      set_layouts[]      = {descriptors.set_layout, sampler.set_layout};
 	VkPipelineLayoutCreateInfo layout_create_info = vkb::initializers::pipeline_layout_create_info(set_layouts, 2);
 
+	// 两个push constant 
 	// To vertex shader we pass a phase to rotate the quads.
 	// To fragment shader we pass down an index, which is used to access the descriptor array.
 	const std::vector<VkPushConstantRange> ranges = {
