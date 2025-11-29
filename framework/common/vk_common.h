@@ -26,6 +26,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "common/error.h"
 #include <vk_mem_alloc.h>
 #include <volk.h>
 
@@ -128,13 +129,6 @@ bool is_buffer_descriptor_type(VkDescriptorType descriptor_type);
  */
 int32_t get_bits_per_pixel(VkFormat format);
 
-enum class ShaderSourceLanguage
-{
-	GLSL,
-	HLSL,
-	SPV,
-};
-
 enum class ShadingLanguage
 {
 	GLSL,
@@ -143,14 +137,21 @@ enum class ShadingLanguage
 };
 
 /**
- * @brief Helper function to create a VkShaderModule
+ * @brief Helper function to create a VkShaderModule from a SPIR-V shader file
  * @param filename The shader location
  * @param device The logical device
  * @param stage The shader stage
- * @param src_language The shader language
- * @return The string to return.
+ * @return The shader module containing the loaded shader
  */
-VkShaderModule load_shader(const std::string &filename, VkDevice device, VkShaderStageFlagBits stage, ShaderSourceLanguage src_language = ShaderSourceLanguage::GLSL);
+VkShaderModule load_shader(const std::string &filename, VkDevice device, VkShaderStageFlagBits stage);
+
+/**
+ * @brief Helper function to create a VkShaderModule from a SPIR-V vector
+ * @param spirv The SPIR-V code in vector format
+ * @param device The logical device
+ * @return The shader module containing the loaded shader
+ */
+VkShaderModule load_shader_from_vector(const std::vector<uint32_t> &spirv, VkDevice device);
 
 /**
  * @brief Helper function to select a VkSurfaceFormatKHR
@@ -182,9 +183,9 @@ struct ImageMemoryBarrier
 
 	VkImageLayout new_layout{VK_IMAGE_LAYOUT_UNDEFINED};
 
-	uint32_t old_queue_family{VK_QUEUE_FAMILY_IGNORED};
+	uint32_t src_queue_family{VK_QUEUE_FAMILY_IGNORED};
 
-	uint32_t new_queue_family{VK_QUEUE_FAMILY_IGNORED};
+	uint32_t dst_queue_family{VK_QUEUE_FAMILY_IGNORED};
 };
 
 /**
@@ -312,5 +313,7 @@ std::vector<LoadStoreInfo> get_clear_store_all();
  */
 std::vector<VkClearValue> get_clear_value();
 }        // namespace gbuffer
+
+uint32_t get_queue_family_index(std::vector<VkQueueFamilyProperties> const &queue_family_properties, VkQueueFlagBits queue_flag);
 
 }        // namespace vkb

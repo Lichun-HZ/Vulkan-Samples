@@ -17,8 +17,6 @@
 
 #pragma once
 
-#include <ctpl_stl.h>
-
 #include "core/command_buffer.h"
 #include "rendering/render_pipeline.h"
 #include "rendering/subpasses/forward_subpass.h"
@@ -49,7 +47,7 @@ class MultithreadingRenderPasses : public vkb::VulkanSampleC
 
 	virtual ~MultithreadingRenderPasses() = default;
 
-	virtual void request_gpu_features(vkb::PhysicalDevice &gpu) override;
+	virtual void request_gpu_features(vkb::core::PhysicalDeviceC &gpu) override;
 
 	virtual bool prepare(const vkb::ApplicationOptions &options) override;
 
@@ -63,11 +61,11 @@ class MultithreadingRenderPasses : public vkb::VulkanSampleC
 	class ShadowSubpass : public vkb::GeometrySubpass
 	{
 	  public:
-		ShadowSubpass(vkb::RenderContext &render_context,
-		              vkb::ShaderSource &&vertex_source,
-		              vkb::ShaderSource &&fragment_source,
-		              vkb::sg::Scene     &scene,
-		              vkb::sg::Camera    &camera);
+		ShadowSubpass(vkb::rendering::RenderContextC &render_context,
+		              vkb::ShaderSource             &&vertex_source,
+		              vkb::ShaderSource             &&fragment_source,
+		              vkb::sg::Scene                 &scene,
+		              vkb::sg::Camera                &camera);
 
 	  protected:
 		virtual void prepare_pipeline_state(vkb::core::CommandBufferC &command_buffer, VkFrontFace front_face, bool double_sided_material)
@@ -86,7 +84,7 @@ class MultithreadingRenderPasses : public vkb::VulkanSampleC
 	class MainSubpass : public vkb::ForwardSubpass
 	{
 	  public:
-		MainSubpass(vkb::RenderContext                              &render_context,
+		MainSubpass(vkb::rendering::RenderContextC                  &render_context,
 		            vkb::ShaderSource                              &&vertex_source,
 		            vkb::ShaderSource                              &&fragment_source,
 		            vkb::sg::Scene                                  &scene,
@@ -150,8 +148,6 @@ class MultithreadingRenderPasses : public vkb::VulkanSampleC
 	 */
 	vkb::sg::Camera *camera{};
 
-	ctpl::thread_pool thread_pool;
-
 	uint32_t swapchain_attachment_index{0};
 
 	uint32_t depth_attachment_index{1};
@@ -165,13 +161,13 @@ class MultithreadingRenderPasses : public vkb::VulkanSampleC
 	 * @param main_command_buffer Already allocated command buffer for the main pass
 	 * @return Single or multiple recorded command buffers
 	 */
-	std::vector<vkb::core::CommandBufferC *> record_command_buffers(vkb::core::CommandBufferC &main_command_buffer);
+	std::vector<std::shared_ptr<vkb::core::CommandBufferC>> record_command_buffers(std::shared_ptr<vkb::core::CommandBufferC> main_command_buffer);
 
-	void record_separate_primary_command_buffers(std::vector<vkb::core::CommandBufferC *> &command_buffers,
-	                                             vkb::core::CommandBufferC                &main_command_buffer);
+	void record_separate_primary_command_buffers(std::vector<std::shared_ptr<vkb::core::CommandBufferC>> &command_buffers,
+	                                             std::shared_ptr<vkb::core::CommandBufferC>               main_command_buffer);
 
-	void record_separate_secondary_command_buffers(std::vector<vkb::core::CommandBufferC *> &command_buffers,
-	                                               vkb::core::CommandBufferC                &main_command_buffer);
+	void record_separate_secondary_command_buffers(std::vector<std::shared_ptr<vkb::core::CommandBufferC>> &command_buffers,
+	                                               std::shared_ptr<vkb::core::CommandBufferC>               main_command_buffer);
 
 	void record_main_pass_image_memory_barriers(vkb::core::CommandBufferC &command_buffer);
 

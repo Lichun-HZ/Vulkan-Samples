@@ -18,24 +18,22 @@
 #include "lighting_subpass.h"
 
 #include "buffer_pool.h"
+#include "core/command_buffer.h"
 #include "rendering/render_context.h"
+#include "resource_cache.h"
 #include "scene_graph/components/camera.h"
 #include "scene_graph/scene.h"
 
 namespace vkb
 {
-LightingSubpass::LightingSubpass(RenderContext &render_context, ShaderSource &&vertex_shader, ShaderSource &&fragment_shader, sg::Camera &cam, sg::Scene &scene_) :
-    Subpass{render_context, std::move(vertex_shader), std::move(fragment_shader)},
-    camera{cam},
-    scene{scene_}
+LightingSubpass::LightingSubpass(
+    vkb::rendering::RenderContextC &render_context, ShaderSource &&vertex_shader, ShaderSource &&fragment_shader, sg::Camera &cam, sg::Scene &scene_) :
+    Subpass{render_context, std::move(vertex_shader), std::move(fragment_shader)}, camera{cam}, scene{scene_}
 {
 }
 
 void LightingSubpass::prepare()
 {
-	lighting_variant.add_definitions({"MAX_LIGHT_COUNT " + std::to_string(MAX_DEFERRED_LIGHT_COUNT)});
-
-	lighting_variant.add_definitions(vkb::rendering::light_type_definitions);
 	// Build all shaders upfront
 	auto &resource_cache = get_render_context().get_device().get_resource_cache();
 	resource_cache.request_shader_module(VK_SHADER_STAGE_VERTEX_BIT, get_vertex_shader(), lighting_variant);

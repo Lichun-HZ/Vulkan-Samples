@@ -75,7 +75,9 @@ inline bool validate_binding(const VkDescriptorSetLayoutBinding &binding, const 
 	return !(std::ranges::find_if(blacklist, [binding](const VkDescriptorType &type) { return type == binding.descriptorType; }) != blacklist.end());
 }
 
-inline bool validate_flags(const PhysicalDevice &gpu, const std::vector<VkDescriptorSetLayoutBinding> &bindings, const std::vector<VkDescriptorBindingFlagsEXT> &flags)
+inline bool validate_flags(vkb::core::PhysicalDeviceC const                &gpu,
+                           const std::vector<VkDescriptorSetLayoutBinding> &bindings,
+                           const std::vector<VkDescriptorBindingFlagsEXT>  &flags)
 {
 	// Assume bindings are valid if there are no flags
 	if (flags.empty())
@@ -94,7 +96,7 @@ inline bool validate_flags(const PhysicalDevice &gpu, const std::vector<VkDescri
 }
 }        // namespace
 
-DescriptorSetLayout::DescriptorSetLayout(Device                            &device,
+DescriptorSetLayout::DescriptorSetLayout(vkb::core::DeviceC                &device,
                                          const uint32_t                     set_index,
                                          const std::vector<ShaderModule *> &shader_modules,
                                          const std::vector<ShaderResource> &resource_set) :

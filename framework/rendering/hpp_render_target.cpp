@@ -17,9 +17,9 @@
 
 #include "rendering/hpp_render_target.h"
 #include "common/hpp_vk_common.h"
-#include "core/hpp_device.h"
+#include "core/device.h"
 #include "core/hpp_image_view.h"
-#include "core/hpp_physical_device.h"
+#include "core/physical_device.h"
 
 namespace vkb
 {

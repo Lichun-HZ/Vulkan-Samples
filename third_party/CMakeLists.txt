@@ -155,6 +155,7 @@ set(KTX_SOURCES
     ${KTX_DIR}/lib/vkformat_enum.h
     ${KTX_DIR}/lib/vkformat_str.c
     ${KTX_DIR}/lib/vkformat_typesize.c
+    ${KTX_DIR}/lib/vkformat_check_variant.c
     ${KTX_DIR}/lib/vk_funcs.c
     ${KTX_DIR}/lib/vk_funcs.h
     ${KTX_DIR}/lib/vkloader.c
@@ -228,55 +229,6 @@ add_library(imgui STATIC ${IMGUI_FILES})
 target_include_directories(imgui SYSTEM PUBLIC ${IMGUI_DIR})
 
 set_target_properties(imgui PROPERTIES FOLDER "ThirdParty" POSITION_INDEPENDENT_CODE ON)
-
-# glslang
-option(ENABLE_SPVREMAPPER OFF)
-option(ENABLE_GLSLANG_BINARIES OFF)
-set(ENABLE_HLSL ON)
-option(ENABLE_OPT OFF)
-option(BUILD_TESTING OFF)
-option(BUILD_EXTERNAL OFF)
-if(IOS)
-    option(ENABLE_PCH OFF)
-endif ()
-
-add_subdirectory(glslang)
-
-if (TARGET GenericCodeGen)
-    set_target_properties(GenericCodeGen PROPERTIES FOLDER "ThirdParty")
-endif()
-if (TARGET MachineIndependent)
-    set_target_properties(MachineIndependent PROPERTIES FOLDER "ThirdParty")
-endif()
-if (TARGET HLSL)
-    set_target_properties(HLSL PROPERTIES FOLDER "ThirdParty")
-endif()
-
-
-if (NOT TARGET glslang-default-resource-limits)
-    add_library(glslang-default-resource-limits
-                glslang/StandAlone/ResourceLimits.cpp)
-
-    set_target_properties(glslang-default-resource-limits PROPERTIES FOLDER "ThirdParty" POSITION_INDEPENDENT_CODE ON)
-
-    target_include_directories(glslang-default-resource-limits
-        SYSTEM PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/glslang)
-endif()
-
-if(NOT MSVC)
-    target_compile_options(glslang PRIVATE
-        "-Wno-logical-op-parentheses"
-        "-Wno-unused-parameter")
-
-    target_compile_options(SPIRV PRIVATE
-        "-Wno-logical-op-parentheses"
-        "-Wno-unused-parameter")
-endif()
-
-set_target_properties(glslang PROPERTIES FOLDER "ThirdParty" POSITION_INDEPENDENT_CODE ON)
-set_target_properties(OGLCompiler PROPERTIES FOLDER "ThirdParty" POSITION_INDEPENDENT_CODE ON)
-set_target_properties(OSDependent PROPERTIES FOLDER "ThirdParty" POSITION_INDEPENDENT_CODE ON)
-set_target_properties(SPIRV PROPERTIES FOLDER "ThirdParty" POSITION_INDEPENDENT_CODE ON)
 
 # spirv-cross
 add_subdirectory(spirv-cross)
@@ -418,12 +370,6 @@ set_property(TARGET fmt PROPERTY FOLDER "ThirdParty")
 set(SPDLOG_FMT_EXTERNAL ON)
 add_subdirectory(spdlog)
 set_property(TARGET spdlog PROPERTY FOLDER "ThirdParty")
-
-# ctpl
-add_library(ctpl INTERFACE)
-set(CTPL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/CTPL)
-target_sources(ctpl INTERFACE ${CTPL_DIR}/ctpl_stl.h)
-target_include_directories(ctpl SYSTEM INTERFACE ${CTPL_DIR})
 
 # OpenCL
 add_library(opencl INTERFACE)

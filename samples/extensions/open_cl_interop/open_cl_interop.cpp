@@ -406,8 +406,8 @@ void OpenCLInterop::prepare_pipelines()
 	// Load shaders
 	std::array<VkPipelineShaderStageCreateInfo, 2> shader_stages{};
 
-	shader_stages[0] = load_shader("open_cl_interop", "texture_display.vert", VK_SHADER_STAGE_VERTEX_BIT);
-	shader_stages[1] = load_shader("open_cl_interop", "texture_display.frag", VK_SHADER_STAGE_FRAGMENT_BIT);
+	shader_stages[0] = load_shader("open_cl_interop", "texture_display.vert.spv", VK_SHADER_STAGE_VERTEX_BIT);
+	shader_stages[1] = load_shader("open_cl_interop", "texture_display.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
 
 	// Vertex bindings and attributes
 	const std::vector<VkVertexInputBindingDescription> vertex_input_bindings = {
@@ -567,7 +567,7 @@ void OpenCLInterop::prepare_shared_image()
 	VkMemoryAllocateInfo memory_allocate_info = vkb::initializers::memory_allocate_info();
 	memory_allocate_info.pNext                = &export_memory_allocate_info;
 	memory_allocate_info.allocationSize       = memory_requirements.size;
-	memory_allocate_info.memoryTypeIndex      = get_device().get_memory_type(memory_requirements.memoryTypeBits, 0);
+	memory_allocate_info.memoryTypeIndex      = get_device().get_gpu().get_memory_type(memory_requirements.memoryTypeBits, 0);
 
 	VK_CHECK(vkAllocateMemory(device_handle, &memory_allocate_info, nullptr, &shared_image.memory));
 	VK_CHECK(vkBindImageMemory(device_handle, shared_image.image, shared_image.memory, 0));
@@ -872,7 +872,7 @@ void OpenCLInterop::prepare_opencl_resources()
 	opencl_objects.command_queue = clCreateCommandQueue(opencl_objects.context, opencl_objects.device_id, 0, &cl_result);
 	CL_CHECK(cl_result);
 
-	std::string kernel_source      = vkb::fs::read_shader("open_cl_interop/procedural_texture.cl");
+	std::string kernel_source      = vkb::fs::read_text_file("open_cl_interop/procedural_texture.cl");
 	auto        kernel_source_data = kernel_source.c_str();
 	size_t      kernel_source_size = kernel_source.size();
 

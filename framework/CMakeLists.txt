@@ -24,7 +24,6 @@ set(FRAMEWORK_FILES
     # Header Files
     gui.h
     drawer.h
-    glsl_compiler.h
     spirv_reflection.h
     gltf_loader.h
     buffer_pool.h
@@ -44,18 +43,14 @@ set(FRAMEWORK_FILES
     vulkan_type_mapping.h
     hpp_api_vulkan_sample.h
     hpp_fence_pool.h
-    hpp_glsl_compiler.h
     hpp_gltf_loader.h
-    hpp_gui.h
     hpp_resource_binding_state.h
     hpp_resource_cache.h
     hpp_resource_record.h
     hpp_resource_replay.h
     hpp_semaphore_pool.h
     # Source Files
-    gui.cpp
     drawer.cpp
-    glsl_compiler.cpp
     spirv_reflection.cpp
     gltf_loader.cpp
     debug_info.cpp
@@ -70,7 +65,6 @@ set(FRAMEWORK_FILES
     timer.cpp
     camera_core.cpp
     hpp_api_vulkan_sample.cpp
-    hpp_gui.cpp
     hpp_resource_cache.cpp)
 
 set(COMMON_FILES
@@ -116,8 +110,6 @@ set(RENDERING_FILES
     rendering/render_target.h
     rendering/subpass.h
     rendering/hpp_pipeline_state.h
-    rendering/hpp_render_context.h
-    rendering/hpp_render_frame.h
     rendering/hpp_render_pipeline.h
     rendering/hpp_render_target.h
     # Source files
@@ -126,12 +118,8 @@ set(RENDERING_FILES
     rendering/postprocessing_pass.cpp
     rendering/postprocessing_renderpass.cpp
     rendering/postprocessing_computepass.cpp
-    rendering/render_context.cpp
-    rendering/render_frame.cpp
     rendering/render_pipeline.cpp
     rendering/render_target.cpp
-    rendering/hpp_render_context.cpp
-    rendering/hpp_render_frame.cpp
     rendering/hpp_render_target.cpp)
 
 set(RENDERING_SUBPASSES_FILES
@@ -154,7 +142,6 @@ set(SCENE_GRAPH_FILES
     scene_graph/hpp_scene.h
     # Source Files
     scene_graph/component.cpp
-    scene_graph/node.cpp
     scene_graph/scene.cpp
     scene_graph/script.cpp)
 
@@ -239,6 +226,7 @@ set(CORE_FILES
     core/descriptor_set.h
     core/queue.h
     core/command_pool.h
+    core/command_pool_base.h
     core/swapchain.h
     core/command_buffer.h
     core/allocated.h
@@ -246,7 +234,6 @@ set(CORE_FILES
     core/image.h
     core/image_view.h
     core/sampled_image.h
-    core/instance.h
     core/sampler.h
     core/framebuffer.h
     core/render_pass.h
@@ -256,12 +243,9 @@ set(CORE_FILES
     core/hpp_descriptor_pool.h
     core/hpp_descriptor_set.h
     core/hpp_descriptor_set_layout.h
-    core/hpp_device.h
     core/hpp_framebuffer.h
     core/hpp_image.h
     core/hpp_image_view.h
-    core/hpp_instance.h
-    core/hpp_physical_device.h
     core/hpp_pipeline.h
     core/hpp_pipeline_layout.h
     core/hpp_query_pool.h
@@ -272,9 +256,7 @@ set(CORE_FILES
     core/hpp_swapchain.h
     core/vulkan_resource.h
     # Source Files
-    core/instance.cpp
-    core/physical_device.cpp
-    core/device.cpp
+    core/command_pool_base.cpp
     core/debug.cpp
     core/image_core.cpp
     core/shader_module.cpp
@@ -289,18 +271,14 @@ set(CORE_FILES
     core/image_core.cpp
     core/image_view.cpp
     core/sampled_image.cpp
-    core/instance.cpp
     core/sampler_core.cpp
     core/framebuffer.cpp
     core/render_pass.cpp
     core/query_pool.cpp
     core/acceleration_structure.cpp
     core/hpp_debug.cpp
-    core/hpp_device.cpp
     core/hpp_image_core.cpp
     core/hpp_image_view.cpp
-    core/hpp_instance.cpp
-    core/hpp_physical_device.cpp
     core/hpp_pipeline_layout.cpp
     core/hpp_queue.cpp
     core/hpp_sampler.cpp
@@ -507,13 +485,9 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
     imgui
     tinygltf
     glm
-    glslang
-    SPIRV
     vma
     spirv-cross-glsl
-    glslang-default-resource-limits
     spdlog
-    ctpl
     plugins)
 
 if(${NEED_LINK_ATOMIC})

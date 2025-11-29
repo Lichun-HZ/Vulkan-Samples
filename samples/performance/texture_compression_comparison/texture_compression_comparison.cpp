@@ -178,7 +178,7 @@ bool TextureCompressionComparison::is_texture_format_supported(const TextureComp
 	const auto device_features = get_device().get_gpu().get_features();
 
 	const bool supported_by_feature   = format.feature_ptr && device_features.*format.feature_ptr;
-	const bool supported_by_extension = strlen(format.extension_name) && get_device().is_extension_supported(format.extension_name);
+	const bool supported_by_extension = strlen(format.extension_name) && get_device().get_gpu().is_extension_supported(format.extension_name);
 	const bool supported_by_default   = format.always_supported;
 
 	return supported_by_default || supported_by_feature || supported_by_extension;
@@ -209,8 +209,8 @@ void TextureCompressionComparison::load_assets()
 
 void TextureCompressionComparison::create_subpass()
 {
-	vkb::ShaderSource vert_shader("base.vert");
-	vkb::ShaderSource frag_shader("base.frag");
+	vkb::ShaderSource vert_shader("base.vert.spv");
+	vkb::ShaderSource frag_shader("base.frag.spv");
 	auto              scene_sub_pass = std::make_unique<vkb::ForwardSubpass>(get_render_context(), std::move(vert_shader), std::move(frag_shader), get_scene(), *camera);
 
 	auto render_pipeline = std::make_unique<vkb::RenderPipeline>();
@@ -254,7 +254,7 @@ namespace
 class CompressedImage : public vkb::sg::Image
 {
   public:
-	CompressedImage(vkb::Device &device, const std::string &name, std::vector<vkb::sg::Mipmap> &&mipmaps, VkFormat format) :
+	CompressedImage(vkb::core::DeviceC &device, const std::string &name, std::vector<vkb::sg::Mipmap> &&mipmaps, VkFormat format) :
 	    vkb::sg::Image(name, std::vector<uint8_t>{}, std::move(mipmaps))
 	{
 		vkb::sg::Image::set_format(format);

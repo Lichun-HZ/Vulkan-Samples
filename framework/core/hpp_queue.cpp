@@ -17,17 +17,14 @@
 
 #include "core/hpp_queue.h"
 #include "core/command_buffer.h"
+#include "core/device.h"
 
 namespace vkb
 {
 namespace core
 {
-HPPQueue::HPPQueue(vkb::core::HPPDevice &device, uint32_t family_index, vk::QueueFamilyProperties properties, vk::Bool32 can_present, uint32_t index) :
-    device{device},
-    family_index{family_index},
-    index{index},
-    can_present{can_present},
-    properties{properties}
+HPPQueue::HPPQueue(vkb::core::DeviceCpp &device, uint32_t family_index, vk::QueueFamilyProperties const &properties, vk::Bool32 can_present, uint32_t index) :
+    device{device}, family_index{family_index}, index{index}, can_present{can_present}, properties{properties}
 {
 	handle = device.get_handle().getQueue(family_index, index);
 }
@@ -41,7 +38,7 @@ HPPQueue::HPPQueue(HPPQueue &&other) :
     properties(std::exchange(other.properties, {}))
 {}
 
-const HPPDevice &HPPQueue::get_device() const
+const vkb::core::DeviceCpp &HPPQueue::get_device() const
 {
 	return device;
 }
@@ -74,7 +71,7 @@ vk::Bool32 HPPQueue::support_present() const
 void HPPQueue::submit(const vkb::core::CommandBufferCpp &command_buffer, vk::Fence fence) const
 {
 	vk::CommandBuffer commandBuffer = command_buffer.get_handle();
-	vk::SubmitInfo    submit_info({}, {}, commandBuffer);
+	vk::SubmitInfo    submit_info{.commandBufferCount = 1, .pCommandBuffers = &commandBuffer};
 	handle.submit(submit_info, fence);
 }
 

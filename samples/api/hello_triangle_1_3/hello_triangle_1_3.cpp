@@ -20,7 +20,6 @@
 #include "common/vk_common.h"
 #include "core/util/logging.hpp"
 #include "filesystem/legacy.h"
-#include "glsl_compiler.h"
 #include "platform/window.h"
 
 #if defined(VKB_DEBUG) || defined(VKB_VALIDATION_LAYERS)
@@ -190,7 +189,7 @@ void HelloTriangleV13::init_instance()
 	    .sType            = VK_STRUCTURE_TYPE_APPLICATION_INFO,
 	    .pApplicationName = "Hello Triangle V1.3",
 	    .pEngineName      = "Vulkan Samples",
-	    .apiVersion       = VK_MAKE_VERSION(1, 3, 0)};
+	    .apiVersion       = VK_API_VERSION_1_3};
 
 	VkInstanceCreateInfo instance_info{
 	    .sType                   = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
@@ -683,26 +682,9 @@ void HelloTriangleV13::init_swapchain()
  * @param shader_stage The shader stage flag specifying the type of shader (e.g., VK_SHADER_STAGE_VERTEX_BIT).
  * @returns A VkShaderModule handle. Aborts execution if shader creation fails.
  */
-VkShaderModule HelloTriangleV13::load_shader_module(const char *path, VkShaderStageFlagBits shader_stage)
+VkShaderModule HelloTriangleV13::load_shader_module(const std::string &path, VkShaderStageFlagBits shader_stage)
 {
-	vkb::GLSLCompiler glsl_compiler;
-
-	auto buffer = vkb::fs::read_shader_binary(path);
-
-	std::string file_ext = path;
-
-	// Extract extension name from the glsl shader file
-	file_ext = file_ext.substr(file_ext.find_last_of(".") + 1);
-
-	std::vector<uint32_t> spirv;
-	std::string           info_log;
-
-	// Compile the GLSL source
-	if (!glsl_compiler.compile_to_spirv(shader_stage, buffer, "main", {}, spirv, info_log))
-	{
-		LOGE("Failed to compile shader, Error: {}", info_log.c_str());
-		return VK_NULL_HANDLE;
-	}
+	auto spirv = vkb::fs::read_shader_binary_u32(path);
 
 	VkShaderModuleCreateInfo module_info{
 	    .sType    = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -798,15 +780,31 @@ void HelloTriangleV13::init_pipeline()
 	    .pDynamicStates    = dynamic_states.data()};
 
 	// Load our SPIR-V shaders.
+
+	// Samples support different shading languages, all of which are offline compiled to SPIR-V, the shader format that Vulkan uses.
+	// The shading language to load for can be selected via command line
+	std::string shader_folder{""};
+	switch (get_shading_language())
+	{
+		case vkb::ShadingLanguage::HLSL:
+			shader_folder = "hlsl";
+			break;
+		case vkb::ShadingLanguage::SLANG:
+			shader_folder = "slang";
+			break;
+		default:
+			shader_folder = "glsl";
+	}
+
 	std::array<VkPipelineShaderStageCreateInfo, 2> shader_stages = {{
 	    {.sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
 	     .stage  = VK_SHADER_STAGE_VERTEX_BIT,
-	     .module = load_shader_module("hello_triangle_1_3/triangle.vert", VK_SHADER_STAGE_VERTEX_BIT),
+	     .module = load_shader_module("hello_triangle_1_3/" + shader_folder + "/triangle.vert.spv", VK_SHADER_STAGE_VERTEX_BIT),
 	     .pName  = "main"},        // Vertex shader stage
 	    {
 	        .sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
 	        .stage  = VK_SHADER_STAGE_FRAGMENT_BIT,
-	        .module = load_shader_module("hello_triangle_1_3/triangle.frag", VK_SHADER_STAGE_FRAGMENT_BIT),
+	        .module = load_shader_module("hello_triangle_1_3/" + shader_folder + "/triangle.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT),
 	        .pName  = "main"}        // Fragment shader stage
 	}};
 
@@ -1210,7 +1208,7 @@ bool HelloTriangleV13::prepare(const vkb::ApplicationOptions &options)
 
 	init_instance();
 
-	vk_instance = std::make_unique<vkb::Instance>(context.instance);
+	vk_instance = std::make_unique<vkb::core::InstanceC>(context.instance);
 
 	context.surface                     = options.window->create_surface(*vk_instance);
 	auto &extent                        = options.window->get_extent();

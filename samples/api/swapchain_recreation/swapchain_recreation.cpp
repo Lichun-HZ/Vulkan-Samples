@@ -20,13 +20,12 @@
 #include "common/vk_common.h"
 #include "core/util/logging.hpp"
 #include "filesystem/legacy.h"
-#include "glsl_compiler.h"
 
 static constexpr uint32_t INVALID_IMAGE_INDEX = std::numeric_limits<uint32_t>::max();
 
 void SwapchainRecreation::get_queue()
 {
-	queue = &get_device().get_suitable_graphics_queue();
+	queue = &get_device().get_queue_by_flags(VK_QUEUE_GRAPHICS_BIT, 0);
 
 	// Make sure presentation is supported on this queue.  This is practically always the case;
 	// if a platform/driver is found where this is not true, all queues supporting
@@ -904,6 +903,7 @@ SwapchainRecreation::SwapchainRecreation()
 	else
 	{
 		LOGI("Disabling usage of VK_EXT_surface_maintenance1 due to USE_MAINTENANCE1=no");
+		allow_maintenance1 = false;
 	}
 }
 
@@ -973,13 +973,21 @@ SwapchainRecreation::~SwapchainRecreation()
 	}
 }
 
-std::unique_ptr<vkb::Device> SwapchainRecreation::create_device(vkb::PhysicalDevice &gpu)
+void SwapchainRecreation::request_gpu_features(vkb::core::PhysicalDeviceC &gpu)
 {
-	std::unique_ptr<vkb::Device> device = vkb::VulkanSampleC::create_device(gpu);
+	if (allow_maintenance1)
+	{
+		REQUEST_OPTIONAL_FEATURE(gpu, VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT, swapchainMaintenance1);
+	}
+}
+
+std::unique_ptr<vkb::core::DeviceC> SwapchainRecreation::create_device(vkb::core::PhysicalDeviceC &gpu)
+{
+	std::unique_ptr<vkb::core::DeviceC> device = vkb::VulkanSampleC::create_device(gpu);
 
 	has_maintenance1 = get_instance().is_enabled(VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME) &&
 	                   get_instance().is_enabled(VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME) &&
-	                   device->is_enabled(VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME);
+	                   device->is_extension_enabled(VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME);
 
 	LOGI("------------------------------------");
 	LOGI("USAGE:");

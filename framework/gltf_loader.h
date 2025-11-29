@@ -1,5 +1,5 @@
-/* Copyright (c) 2018-2024, Arm Limited and Contributors
- * Copyright (c) 2019-2024, Sascha Willems
+/* Copyright (c) 2018-2025, Arm Limited and Contributors
+ * Copyright (c) 2019-2025, Sascha Willems
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -18,6 +18,7 @@
 
 #pragma once
 
+#include "common/vk_common.h"
 #include <memory>
 #include <mutex>
 
@@ -26,6 +27,7 @@
 #define TINYGLTF_NO_EXTERNAL_IMAGE
 #include <tiny_gltf.h>
 
+#include "scene_graph/node.h"
 #include "timer.h"
 
 #include "vulkan/vulkan.h"
@@ -34,7 +36,13 @@
 
 namespace vkb
 {
+namespace core
+{
+template <vkb::BindingType bindingType>
 class Device;
+using DeviceCpp = Device<vkb::BindingType::Cpp>;
+using DeviceC   = Device<vkb::BindingType::C>;
+}        // namespace core
 
 namespace sg
 {
@@ -71,7 +79,7 @@ struct TypeCast
 class GLTFLoader
 {
   public:
-	GLTFLoader(Device &device);
+	GLTFLoader(vkb::core::DeviceC &device);
 
 	virtual ~GLTFLoader() = default;
 
@@ -84,7 +92,7 @@ class GLTFLoader
 	std::unique_ptr<sg::SubMesh> read_model_from_file(const std::string &file_name, uint32_t index, bool storage_buffer = false, VkBufferUsageFlags additional_buffer_usage_flags = 0);
 
   protected:
-	virtual std::unique_ptr<sg::Node> parse_node(const tinygltf::Node &gltf_node, size_t index) const;
+	virtual std::unique_ptr<vkb::scene_graph::NodeC> parse_node(const tinygltf::Node &gltf_node, size_t index) const;
 
 	virtual std::unique_ptr<sg::Camera> parse_camera(const tinygltf::Camera &gltf_camera) const;
 
@@ -124,7 +132,7 @@ class GLTFLoader
 	 */
 	tinygltf::Value *get_extension(tinygltf::ExtensionMap &tinygltf_extensions, const std::string &extension);
 
-	Device &device;
+	vkb::core::DeviceC &device;
 
 	tinygltf::Model model;
 

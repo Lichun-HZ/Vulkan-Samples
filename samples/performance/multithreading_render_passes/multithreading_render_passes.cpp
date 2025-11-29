@@ -39,12 +39,11 @@ MultithreadingRenderPasses::MultithreadingRenderPasses()
 	config.insert<vkb::IntSetting>(2, multithreading_mode, 2);
 }
 
-void MultithreadingRenderPasses::request_gpu_features(vkb::PhysicalDevice &gpu)
+void MultithreadingRenderPasses::request_gpu_features(vkb::core::PhysicalDeviceC &gpu)
 {
 #ifdef VKB_ENABLE_PORTABILITY
 	// Since shadowmap_sampler_create_info.compareEnable = VK_TRUE, must enable the mutableComparisonSamplers feature of VK_KHR_portability_subset
-	REQUEST_REQUIRED_FEATURE(
-	    gpu, VkPhysicalDevicePortabilitySubsetFeaturesKHR, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PORTABILITY_SUBSET_FEATURES_KHR, mutableComparisonSamplers);
+	REQUEST_REQUIRED_FEATURE(gpu, VkPhysicalDevicePortabilitySubsetFeaturesKHR, mutableComparisonSamplers);
 #endif
 }
 
@@ -114,8 +113,8 @@ std::unique_ptr<vkb::RenderTarget> MultithreadingRenderPasses::create_shadow_ren
 std::unique_ptr<vkb::RenderPipeline> MultithreadingRenderPasses::create_shadow_renderpass()
 {
 	// Shadowmap subpass
-	auto shadowmap_vs  = vkb::ShaderSource{"shadows/shadowmap.vert"};
-	auto shadowmap_fs  = vkb::ShaderSource{"shadows/shadowmap.frag"};
+	auto shadowmap_vs  = vkb::ShaderSource{"shadows/shadowmap.vert.spv"};
+	auto shadowmap_fs  = vkb::ShaderSource{"shadows/shadowmap.frag.spv"};
 	auto scene_subpass = std::make_unique<ShadowSubpass>(get_render_context(), std::move(shadowmap_vs), std::move(shadowmap_fs), get_scene(), *shadowmap_camera);
 
 	shadow_subpass = scene_subpass.get();
@@ -130,8 +129,8 @@ std::unique_ptr<vkb::RenderPipeline> MultithreadingRenderPasses::create_shadow_r
 std::unique_ptr<vkb::RenderPipeline> MultithreadingRenderPasses::create_main_renderpass()
 {
 	// Main subpass
-	auto main_vs       = vkb::ShaderSource{"shadows/main.vert"};
-	auto main_fs       = vkb::ShaderSource{"shadows/main.frag"};
+	auto main_vs       = vkb::ShaderSource{"shadows/main.vert.spv"};
+	auto main_fs       = vkb::ShaderSource{"shadows/main.frag.spv"};
 	auto scene_subpass = std::make_unique<MainSubpass>(
 	    get_render_context(), std::move(main_vs), std::move(main_fs), get_scene(), *camera, *shadowmap_camera, shadow_render_targets);
 
@@ -153,7 +152,7 @@ void MultithreadingRenderPasses::update(float delta_time)
 
 	update_gui(delta_time);
 
-	auto &main_command_buffer = get_render_context().begin();
+	auto main_command_buffer = get_render_context().begin();
 
 	auto command_buffers = record_command_buffers(main_command_buffer);
 
@@ -186,22 +185,17 @@ void MultithreadingRenderPasses::draw_gui()
 	    lines);
 }
 
-std::vector<vkb::core::CommandBufferC *>
-    MultithreadingRenderPasses::record_command_buffers(vkb::core::CommandBufferC &main_command_buffer)
+std::vector<std::shared_ptr<vkb::core::CommandBufferC>>
+    MultithreadingRenderPasses::record_command_buffers(std::shared_ptr<vkb::core::CommandBufferC> main_command_buffer)
 {
 	auto        reset_mode = vkb::CommandBufferResetMode::ResetPool;
 	const auto &queue      = get_device().get_queue_by_flags(VK_QUEUE_GRAPHICS_BIT, 0);
 
-	std::vector<vkb::core::CommandBufferC *> command_buffers;
+	std::vector<std::shared_ptr<vkb::core::CommandBufferC>> command_buffers;
 
 	// Resources are requested from pools for thread #1 in shadow pass if multithreading is used
 	auto use_multithreading = multithreading_mode != static_cast<int>(MultithreadingMode::None);
 	shadow_subpass->set_thread_index(use_multithreading ? 1 : 0);
-
-	if (use_multithreading && thread_pool.size() < 1)
-	{
-		thread_pool.resize(1);
-	}
 
 	switch (multithreading_mode)
 	{
@@ -212,117 +206,112 @@ std::vector<vkb::core::CommandBufferC *>
 			record_separate_secondary_command_buffers(command_buffers, main_command_buffer);
 			break;
 		default:
-			main_command_buffer.begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
-			draw_shadow_pass(main_command_buffer);
-			draw_main_pass(main_command_buffer);
-			main_command_buffer.end();
-			command_buffers.push_back(&main_command_buffer);
+			main_command_buffer->begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+			draw_shadow_pass(*main_command_buffer);
+			draw_main_pass(*main_command_buffer);
+			main_command_buffer->end();
+			command_buffers.push_back(main_command_buffer);
 			break;
 	}
 
 	return command_buffers;
 }
 
-void MultithreadingRenderPasses::record_separate_primary_command_buffers(std::vector<vkb::core::CommandBufferC *> &command_buffers,
-                                                                         vkb::core::CommandBufferC                &main_command_buffer)
+void MultithreadingRenderPasses::record_separate_primary_command_buffers(std::vector<std::shared_ptr<vkb::core::CommandBufferC>> &command_buffers,
+                                                                         std::shared_ptr<vkb::core::CommandBufferC>               main_command_buffer)
 {
 	auto        reset_mode = vkb::CommandBufferResetMode::ResetPool;
 	const auto &queue      = get_device().get_queue_by_flags(VK_QUEUE_GRAPHICS_BIT, 0);
 
 	// Shadow pass will be recorded in thread with id 1
-	auto &shadow_command_buffer = get_render_context().get_active_frame().request_command_buffer(queue,
-	                                                                                             reset_mode,
-	                                                                                             VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-	                                                                                             1);
+	auto shadow_command_buffer =
+	    get_render_context().get_active_frame().get_command_pool(queue, reset_mode, 1).request_command_buffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY);
 
 	// Recording shadow command buffer
-	auto shadow_buffer_future = thread_pool.push(
-	    [this, &shadow_command_buffer](size_t thread_id) {
-		    shadow_command_buffer.begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
-		    draw_shadow_pass(shadow_command_buffer);
-		    shadow_command_buffer.end();
+	auto shadow_buffer_future = std::async(
+	    [this, shadow_command_buffer]() {
+		    shadow_command_buffer->begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+		    draw_shadow_pass(*shadow_command_buffer);
+		    shadow_command_buffer->end();
 	    });
 
 	// Recording scene command buffer
-	main_command_buffer.begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
-	draw_main_pass(main_command_buffer);
-	main_command_buffer.end();
+	main_command_buffer->begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+	draw_main_pass(*main_command_buffer);
+	main_command_buffer->end();
 
-	command_buffers.push_back(&shadow_command_buffer);
-	command_buffers.push_back(&main_command_buffer);
+	command_buffers.push_back(shadow_command_buffer);
+	command_buffers.push_back(main_command_buffer);
 
 	// Wait for recording
 	shadow_buffer_future.get();
 }
 
-void MultithreadingRenderPasses::record_separate_secondary_command_buffers(std::vector<vkb::core::CommandBufferC *> &command_buffers,
-                                                                           vkb::core::CommandBufferC                &main_command_buffer)
+void MultithreadingRenderPasses::record_separate_secondary_command_buffers(std::vector<std::shared_ptr<vkb::core::CommandBufferC>> &command_buffers,
+                                                                           std::shared_ptr<vkb::core::CommandBufferC>               main_command_buffer)
 {
 	auto        reset_mode = vkb::CommandBufferResetMode::ResetPool;
 	const auto &queue      = get_device().get_queue_by_flags(VK_QUEUE_GRAPHICS_BIT, 0);
 
 	// Main pass will be recorded in thread with id 0
-	auto &scene_command_buffer = get_render_context().get_active_frame().request_command_buffer(queue,
-	                                                                                            reset_mode,
-	                                                                                            VK_COMMAND_BUFFER_LEVEL_SECONDARY,
-	                                                                                            0);
+	auto scene_command_buffer =
+	    get_render_context().get_active_frame().get_command_pool(queue, reset_mode, 0).request_command_buffer(VK_COMMAND_BUFFER_LEVEL_SECONDARY);
 
 	// Shadow pass will be recorded in thread with id 1
-	auto &shadow_command_buffer = get_render_context().get_active_frame().request_command_buffer(queue,
-	                                                                                             reset_mode,
-	                                                                                             VK_COMMAND_BUFFER_LEVEL_SECONDARY,
-	                                                                                             1);
+	auto shadow_command_buffer =
+	    get_render_context().get_active_frame().get_command_pool(queue, reset_mode, 1).request_command_buffer(VK_COMMAND_BUFFER_LEVEL_SECONDARY);
 
 	// Same framebuffer and render pass should be specified in the inheritance info for secondary command buffers
 	// and vkCmdBeginRenderPass for primary command buffers
 	auto &shadow_render_target = *shadow_render_targets[get_render_context().get_active_frame_index()];
-	auto &shadow_render_pass   = main_command_buffer.get_render_pass(shadow_render_target, shadow_render_pipeline->get_load_store(), shadow_render_pipeline->get_subpasses());
+	auto &shadow_render_pass   = main_command_buffer->get_render_pass(shadow_render_target, shadow_render_pipeline->get_load_store(), shadow_render_pipeline->get_subpasses());
 	auto &shadow_framebuffer   = get_device().get_resource_cache().request_framebuffer(shadow_render_target, shadow_render_pass);
 
 	auto &scene_render_target = get_render_context().get_active_frame().get_render_target();
-	auto &scene_render_pass   = main_command_buffer.get_render_pass(scene_render_target, main_render_pipeline->get_load_store(), main_render_pipeline->get_subpasses());
+	auto &scene_render_pass   = main_command_buffer->get_render_pass(scene_render_target, main_render_pipeline->get_load_store(), main_render_pipeline->get_subpasses());
 	auto &scene_framebuffer   = get_device().get_resource_cache().request_framebuffer(scene_render_target, scene_render_pass);
 
 	// Recording shadow command buffer
-	auto shadow_buffer_future = thread_pool.push(
-	    [this, &shadow_command_buffer, &shadow_render_pass, &shadow_framebuffer](size_t thread_id) {
-		    shadow_command_buffer.begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT | VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT, &shadow_render_pass, &shadow_framebuffer, 0);
-		    draw_shadow_pass(shadow_command_buffer);
-		    shadow_command_buffer.end();
+	auto shadow_buffer_future = std::async(
+	    [this, shadow_command_buffer, &shadow_render_pass, &shadow_framebuffer]() {
+		    shadow_command_buffer->begin(
+		        VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT | VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT, &shadow_render_pass, &shadow_framebuffer, 0);
+		    draw_shadow_pass(*shadow_command_buffer);
+		    shadow_command_buffer->end();
 	    });
 
 	// Recording scene command buffer
 	vkb::ColorBlendState scene_color_blend_state;
 	scene_color_blend_state.attachments.resize(scene_render_pass.get_color_output_count(0));
 
-	scene_command_buffer.begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT | VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT, &scene_render_pass, &scene_framebuffer, 0);
-	scene_command_buffer.set_color_blend_state(scene_color_blend_state);
-	draw_main_pass(scene_command_buffer);
-	scene_command_buffer.end();
+	scene_command_buffer->begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT | VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT, &scene_render_pass, &scene_framebuffer, 0);
+	scene_command_buffer->set_color_blend_state(scene_color_blend_state);
+	draw_main_pass(*scene_command_buffer);
+	scene_command_buffer->end();
 
 	// Wait for recording
 	shadow_buffer_future.get();
 
 	// Recording main command buffer
-	main_command_buffer.begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+	main_command_buffer->begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
-	record_shadow_pass_image_memory_barrier(main_command_buffer);
+	record_shadow_pass_image_memory_barrier(*main_command_buffer);
 
-	main_command_buffer.begin_render_pass(shadow_render_target, shadow_render_pass, shadow_framebuffer, shadow_render_pipeline->get_clear_value(), VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
-	main_command_buffer.execute_commands(shadow_command_buffer);
-	main_command_buffer.end_render_pass();
+	main_command_buffer->begin_render_pass(shadow_render_target, shadow_render_pass, shadow_framebuffer, shadow_render_pipeline->get_clear_value(), VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
+	main_command_buffer->execute_commands(*shadow_command_buffer);
+	main_command_buffer->end_render_pass();
 
-	record_main_pass_image_memory_barriers(main_command_buffer);
+	record_main_pass_image_memory_barriers(*main_command_buffer);
 
-	main_command_buffer.begin_render_pass(scene_render_target, scene_render_pass, scene_framebuffer, main_render_pipeline->get_clear_value(), VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
-	main_command_buffer.execute_commands(scene_command_buffer);
-	main_command_buffer.end_render_pass();
+	main_command_buffer->begin_render_pass(scene_render_target, scene_render_pass, scene_framebuffer, main_render_pipeline->get_clear_value(), VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
+	main_command_buffer->execute_commands(*scene_command_buffer);
+	main_command_buffer->end_render_pass();
 
-	record_present_image_memory_barrier(main_command_buffer);
+	record_present_image_memory_barrier(*main_command_buffer);
 
-	main_command_buffer.end();
+	main_command_buffer->end();
 
-	command_buffers.push_back(&main_command_buffer);
+	command_buffers.push_back(main_command_buffer);
 }
 
 void MultithreadingRenderPasses::record_main_pass_image_memory_barriers(vkb::core::CommandBufferC &command_buffer)
@@ -452,7 +441,7 @@ void MultithreadingRenderPasses::draw_main_pass(vkb::core::CommandBufferC &comma
 	}
 }
 
-MultithreadingRenderPasses::MainSubpass::MainSubpass(vkb::RenderContext                              &render_context,
+MultithreadingRenderPasses::MainSubpass::MainSubpass(vkb::rendering::RenderContextC                  &render_context,
                                                      vkb::ShaderSource                              &&vertex_source,
                                                      vkb::ShaderSource                              &&fragment_source,
                                                      vkb::sg::Scene                                  &scene,
@@ -509,11 +498,11 @@ void MultithreadingRenderPasses::MainSubpass::draw(vkb::core::CommandBufferC &co
 	ForwardSubpass::draw(command_buffer);
 }
 
-MultithreadingRenderPasses::ShadowSubpass::ShadowSubpass(vkb::RenderContext &render_context,
-                                                         vkb::ShaderSource &&vertex_source,
-                                                         vkb::ShaderSource &&fragment_source,
-                                                         vkb::sg::Scene     &scene,
-                                                         vkb::sg::Camera    &camera) :
+MultithreadingRenderPasses::ShadowSubpass::ShadowSubpass(vkb::rendering::RenderContextC &render_context,
+                                                         vkb::ShaderSource             &&vertex_source,
+                                                         vkb::ShaderSource             &&fragment_source,
+                                                         vkb::sg::Scene                 &scene,
+                                                         vkb::sg::Camera                &camera) :
     vkb::GeometrySubpass{render_context, std::move(vertex_source), std::move(fragment_source), scene, camera}
 {
 }

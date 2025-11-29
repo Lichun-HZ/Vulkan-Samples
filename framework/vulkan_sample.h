@@ -19,8 +19,9 @@
 #pragma once
 
 #include "common/hpp_utils.h"
+#include "core/debug.h"
+#include "gui.h"
 #include "hpp_gltf_loader.h"
-#include "hpp_gui.h"
 #include "platform/application.h"
 #include "platform/window.h"
 #include "rendering/hpp_render_pipeline.h"
@@ -78,11 +79,11 @@ namespace vkb
  * - updating Stats and Gui
  * - getting an active RenderTarget constructed by the factory function of the RenderFrame
  * - setting up barriers for color and depth, note that these are only for the default RenderTarget
- * - calling VulkanSample::draw_swapchain_renderpass (see below)
+ * - calling VulkanSample::draw_renderpass (see below)
  * - setting up a barrier for the Swapchain transition to present
  * - submitting the CommandBuffer and end the Frame (present)
  *
- * @subsection draw_swapchain Draw swapchain renderpass
+ * @subsection draw_renderpass Draw renderpass
  * The function starts and ends a RenderPass which includes setting up viewport, scissors,
  * blend state (etc.) and calling draw_scene.
  * Note that RenderPipeline::draw is not virtual in RenderPipeline, but internally it calls
@@ -100,7 +101,6 @@ namespace vkb
  * - Core classes: Classes in vkb::core wrap Vulkan objects for indexing and hashing.
  */
 
-class Gui;
 class RenderPipeline;
 class Stats;
 
@@ -113,7 +113,9 @@ class HPPPhysicalDevice;
 
 namespace rendering
 {
-class HPPRenderContext;
+template <vkb::BindingType bindingType>
+class RenderContext;
+
 class HPPRenderTarget;
 }        // namespace rendering
 
@@ -134,11 +136,6 @@ class VulkanSample : public vkb::Application
 	VulkanSample() = default;
 	~VulkanSample() override;
 
-	using DeviceType         = typename std::conditional<bindingType == BindingType::Cpp, vkb::core::HPPDevice, vkb::Device>::type;
-	using GuiType            = typename std::conditional<bindingType == BindingType::Cpp, vkb::HPPGui, vkb::Gui>::type;
-	using InstanceType       = typename std::conditional<bindingType == BindingType::Cpp, vkb::core::HPPInstance, vkb::Instance>::type;
-	using PhysicalDeviceType = typename std::conditional<bindingType == BindingType::Cpp, vkb::core::HPPPhysicalDevice, vkb::PhysicalDevice>::type;
-	using RenderContextType  = typename std::conditional<bindingType == BindingType::Cpp, vkb::rendering::HPPRenderContext, vkb::RenderContext>::type;
 	using RenderPipelineType = typename std::conditional<bindingType == BindingType::Cpp, vkb::rendering::HPPRenderPipeline, vkb::RenderPipeline>::type;
 	using RenderTargetType   = typename std::conditional<bindingType == BindingType::Cpp, vkb::rendering::HPPRenderTarget, vkb::RenderTarget>::type;
 	using SceneType          = typename std::conditional<bindingType == BindingType::Cpp, vkb::scene_graph::HPPScene, vkb::sg::Scene>::type;
@@ -148,10 +145,10 @@ class VulkanSample : public vkb::Application
 	using SurfaceFormatType  = typename std::conditional<bindingType == BindingType::Cpp, vk::SurfaceFormatKHR, VkSurfaceFormatKHR>::type;
 	using SurfaceType        = typename std::conditional<bindingType == BindingType::Cpp, vk::SurfaceKHR, VkSurfaceKHR>::type;
 
-	Configuration           &get_configuration();
-	RenderContextType       &get_render_context();
-	RenderContextType const &get_render_context() const;
-	bool                     has_render_context() const;
+	Configuration                                    &get_configuration();
+	vkb::rendering::RenderContext<bindingType>       &get_render_context();
+	vkb::rendering::RenderContext<bindingType> const &get_render_context() const;
+	bool                                              has_render_context() const;
 
 	/// <summary>
 	/// PROTECTED VIRTUAL INTERFACE
@@ -166,13 +163,13 @@ class VulkanSample : public vkb::Application
 	 * @brief Create the Vulkan device used by this sample
 	 * @note Can be overridden to implement custom device creation
 	 */
-	virtual std::unique_ptr<DeviceType> create_device(PhysicalDeviceType &gpu);
+	virtual std::unique_ptr<vkb::core::Device<bindingType>> create_device(vkb::core::PhysicalDevice<bindingType> &gpu);
 
 	/**
 	 * @brief Create the Vulkan instance used by this sample
 	 * @note Can be overridden to implement custom instance creation
 	 */
-	virtual std::unique_ptr<InstanceType> create_instance();
+	virtual std::unique_ptr<vkb::core::Instance<bindingType>> create_instance();
 
 	/**
 	 * @brief Override this to customise the creation of the render_context
@@ -212,7 +209,7 @@ class VulkanSample : public vkb::Application
 	/**
 	 * @brief Request features from the gpu based on what is supported
 	 */
-	virtual void request_gpu_features(PhysicalDeviceType &gpu);
+	virtual void request_gpu_features(vkb::core::PhysicalDevice<bindingType> &gpu);
 
 	/**
 	 * @brief Resets the stats view max values for high demanding configs
@@ -263,24 +260,24 @@ class VulkanSample : public vkb::Application
 	 */
 	void create_render_context(const std::vector<SurfaceFormatType> &surface_priority_list);
 
-	DeviceType                           &get_device();
-	DeviceType const                     &get_device() const;
-	GuiType                              &get_gui();
-	GuiType const                        &get_gui() const;
-	InstanceType                         &get_instance();
-	InstanceType const                   &get_instance() const;
-	RenderPipelineType                   &get_render_pipeline();
-	RenderPipelineType const             &get_render_pipeline() const;
-	SceneType                            &get_scene();
-	StatsType                            &get_stats();
-	SurfaceType                           get_surface() const;
-	std::vector<SurfaceFormatType>       &get_surface_priority_list();
-	std::vector<SurfaceFormatType> const &get_surface_priority_list() const;
-	bool                                  has_device() const;
-	bool                                  has_instance() const;
-	bool                                  has_gui() const;
-	bool                                  has_render_pipeline() const;
-	bool                                  has_scene();
+	vkb::core::Device<bindingType>         &get_device();
+	vkb::core::Device<bindingType> const   &get_device() const;
+	vkb::Gui<bindingType>                  &get_gui();
+	vkb::Gui<bindingType> const            &get_gui() const;
+	vkb::core::Instance<bindingType>       &get_instance();
+	vkb::core::Instance<bindingType> const &get_instance() const;
+	RenderPipelineType                     &get_render_pipeline();
+	RenderPipelineType const               &get_render_pipeline() const;
+	SceneType                              &get_scene();
+	StatsType                              &get_stats();
+	SurfaceType                             get_surface() const;
+	std::vector<SurfaceFormatType>         &get_surface_priority_list();
+	std::vector<SurfaceFormatType> const   &get_surface_priority_list() const;
+	bool                                    has_device() const;
+	bool                                    has_instance() const;
+	bool                                    has_gui() const;
+	bool                                    has_render_pipeline() const;
+	bool                                    has_scene();
 
 	/**
 	 * @brief Loads the scene
@@ -308,7 +305,7 @@ class VulkanSample : public vkb::Application
 	 */
 	void set_high_priority_graphics_queue_enable(bool enable);
 
-	void set_render_context(std::unique_ptr<RenderContextType> &&render_context);
+	void set_render_context(std::unique_ptr<vkb::rendering::RenderContext<bindingType>> &&render_context);
 
 	void set_render_pipeline(std::unique_ptr<RenderPipelineType> &&render_pipeline);
 
@@ -385,17 +382,17 @@ class VulkanSample : public vkb::Application
 	/**
 	 * @brief The Vulkan instance
 	 */
-	std::unique_ptr<vkb::core::HPPInstance> instance;
+	std::unique_ptr<vkb::core::InstanceCpp> instance;
 
 	/**
 	 * @brief The Vulkan device
 	 */
-	std::unique_ptr<vkb::core::HPPDevice> device;
+	std::unique_ptr<vkb::core::DeviceCpp> device;
 
 	/**
 	 * @brief Context used for rendering, it is responsible for managing the frames and their underlying images
 	 */
-	std::unique_ptr<vkb::rendering::HPPRenderContext> render_context;
+	std::unique_ptr<vkb::rendering::RenderContextCpp> render_context;
 
 	/**
 	 * @brief Pipeline used for rendering, it should be set up by the concrete sample
@@ -407,7 +404,7 @@ class VulkanSample : public vkb::Application
 	 */
 	std::unique_ptr<vkb::scene_graph::HPPScene> scene;
 
-	std::unique_ptr<vkb::HPPGui> gui;
+	std::unique_ptr<vkb::GuiCpp> gui;
 
 	std::unique_ptr<vkb::stats::HPPStats> stats;
 
@@ -443,13 +440,18 @@ class VulkanSample : public vkb::Application
 	std::vector<vk::LayerSettingEXT> layer_settings;
 
 	/** @brief The Vulkan API version to request for this sample at instance creation time */
-	uint32_t api_version = VK_API_VERSION_1_0;
+	uint32_t api_version = VK_API_VERSION_1_1;
 
 	/** @brief Whether or not we want a high priority graphics queue. */
 	bool high_priority_graphics_queue{false};
 
 	std::unique_ptr<vkb::core::HPPDebugUtils> debug_utils;
 };
+
+using VulkanSampleC   = VulkanSample<vkb::BindingType::C>;
+using VulkanSampleCpp = VulkanSample<vkb::BindingType::Cpp>;
+
+// Member function definitions
 
 template <vkb::BindingType bindingType>
 inline VulkanSample<bindingType>::~VulkanSample()
@@ -494,30 +496,33 @@ inline void VulkanSample<bindingType>::add_layer_setting(LayerSettingType const 
 	}
 	else
 	{
-		layer_settings.push_back(reinterpret_cast<VkLayerSettingEXT const &>(layerSetting));
+		layer_settings.push_back(reinterpret_cast<vk::LayerSettingEXT const &>(layerSetting));
 	}
 }
 
 template <vkb::BindingType bindingType>
-inline std::unique_ptr<typename VulkanSample<bindingType>::DeviceType> VulkanSample<bindingType>::create_device(PhysicalDeviceType &gpu)
+inline std::unique_ptr<typename vkb::core::Device<bindingType>>
+    VulkanSample<bindingType>::create_device(vkb::core::PhysicalDevice<bindingType> &gpu)
 {
 	if constexpr (bindingType == BindingType::Cpp)
 	{
-		return std::make_unique<vkb::core::HPPDevice>(gpu, surface, std::move(debug_utils), get_device_extensions());
+		return std::make_unique<vkb::core::DeviceCpp>(
+		    gpu, surface, std::move(debug_utils), get_device_extensions(), [this](vkb::core::PhysicalDeviceCpp &gpu) { request_gpu_features(gpu); });
 	}
 	else
 	{
-		return std::make_unique<vkb::Device>(gpu,
-		                                     static_cast<VkSurfaceKHR>(surface),
-		                                     std::unique_ptr<vkb::DebugUtils>(reinterpret_cast<vkb::DebugUtils *>(debug_utils.release())),
-		                                     get_device_extensions());
+		return std::make_unique<vkb::core::DeviceC>(gpu,
+		                                            static_cast<VkSurfaceKHR>(surface),
+		                                            std::unique_ptr<vkb::DebugUtils>(reinterpret_cast<vkb::DebugUtils *>(debug_utils.release())),
+		                                            get_device_extensions(),
+		                                            [this](vkb::core::PhysicalDeviceC &gpu) { request_gpu_features(gpu); });
 	}
 }
 
 template <vkb::BindingType bindingType>
-inline std::unique_ptr<typename VulkanSample<bindingType>::InstanceType> VulkanSample<bindingType>::create_instance()
+inline std::unique_ptr<vkb::core::Instance<bindingType>> VulkanSample<bindingType>::create_instance()
 {
-	return std::make_unique<InstanceType>(get_name(), get_instance_extensions(), get_instance_layers(), get_layer_settings(), api_version);
+	return std::make_unique<vkb::core::Instance<bindingType>>(get_name(), get_instance_extensions(), get_instance_layers(), get_layer_settings(), api_version);
 }
 
 template <vkb::BindingType bindingType>
@@ -546,12 +551,12 @@ void VulkanSample<bindingType>::create_render_context_impl(const std::vector<vk:
 	vk::PresentModeKHR              present_mode = (window->get_properties().vsync == Window::Vsync::OFF) ? vk::PresentModeKHR::eMailbox : vk::PresentModeKHR::eFifo;
 	std::vector<vk::PresentModeKHR> present_mode_priority_list{vk::PresentModeKHR::eFifo, vk::PresentModeKHR::eMailbox, vk::PresentModeKHR::eImmediate};
 #else
-	vk::PresentModeKHR              present_mode = (window->get_properties().vsync == Window::Vsync::ON) ? vk::PresentModeKHR::eFifo : vk::PresentModeKHR::eMailbox;
-	std::vector<vk::PresentModeKHR> present_mode_priority_list{vk::PresentModeKHR::eMailbox, vk::PresentModeKHR::eImmediate, vk::PresentModeKHR::eFifo};
+	vk::PresentModeKHR               present_mode = (window->get_properties().vsync == Window::Vsync::ON) ? vk::PresentModeKHR::eFifo : vk::PresentModeKHR::eMailbox;
+	std::vector<vk::PresentModeKHR>  present_mode_priority_list{vk::PresentModeKHR::eMailbox, vk::PresentModeKHR::eImmediate, vk::PresentModeKHR::eFifo};
 #endif
 
 	render_context =
-	    std::make_unique<vkb::rendering::HPPRenderContext>(*device, surface, *window, present_mode, present_mode_priority_list, surface_priority_list);
+	    std::make_unique<vkb::rendering::RenderContextCpp>(*device, surface, *window, present_mode, present_mode_priority_list, surface_priority_list);
 }
 
 template <vkb::BindingType bindingType>
@@ -692,20 +697,20 @@ inline Configuration &VulkanSample<bindingType>::get_configuration()
 }
 
 template <vkb::BindingType bindingType>
-inline typename VulkanSample<bindingType>::DeviceType const &VulkanSample<bindingType>::get_device() const
+inline vkb::core::Device<bindingType> const &VulkanSample<bindingType>::get_device() const
 {
 	if constexpr (bindingType == BindingType::Cpp)
 	{
-		return reinterpret_cast<vkb::core::HPPDevice const &>(*device);
+		return *device;
 	}
 	else
 	{
-		return *device;
+		return reinterpret_cast<vkb::core::DeviceC const &>(*device);
 	}
 }
 
 template <vkb::BindingType bindingType>
-inline typename VulkanSample<bindingType>::DeviceType &VulkanSample<bindingType>::get_device()
+inline vkb::core::Device<bindingType> &VulkanSample<bindingType>::get_device()
 {
 	if constexpr (bindingType == BindingType::Cpp)
 	{
@@ -713,7 +718,7 @@ inline typename VulkanSample<bindingType>::DeviceType &VulkanSample<bindingType>
 	}
 	else
 	{
-		return reinterpret_cast<vkb::Device &>(*device);
+		return reinterpret_cast<vkb::core::DeviceC &>(*device);
 	}
 }
 
@@ -724,7 +729,7 @@ inline std::unordered_map<const char *, bool> const &VulkanSample<bindingType>::
 }
 
 template <vkb::BindingType bindingType>
-inline typename VulkanSample<bindingType>::GuiType &VulkanSample<bindingType>::get_gui()
+inline vkb::Gui<bindingType> &VulkanSample<bindingType>::get_gui()
 {
 	if constexpr (bindingType == BindingType::Cpp)
 	{
@@ -732,12 +737,12 @@ inline typename VulkanSample<bindingType>::GuiType &VulkanSample<bindingType>::g
 	}
 	else
 	{
-		return reinterpret_cast<vkb::Gui &>(*gui);
+		return reinterpret_cast<vkb::GuiC &>(*gui);
 	}
 }
 
 template <vkb::BindingType bindingType>
-inline typename VulkanSample<bindingType>::GuiType const &VulkanSample<bindingType>::get_gui() const
+inline vkb::Gui<bindingType> const &VulkanSample<bindingType>::get_gui() const
 {
 	if constexpr (bindingType == BindingType::Cpp)
 	{
@@ -745,7 +750,7 @@ inline typename VulkanSample<bindingType>::GuiType const &VulkanSample<bindingTy
 	}
 	else
 	{
-		return reinterpret_cast<vkb::Gui const &>(*gui);
+		return reinterpret_cast<vkb::GuiC const &>(*gui);
 	}
 }
 
@@ -776,7 +781,7 @@ inline std::vector<typename VulkanSample<bindingType>::SurfaceFormatType> const 
 }
 
 template <vkb::BindingType bindingType>
-inline typename VulkanSample<bindingType>::InstanceType &VulkanSample<bindingType>::get_instance()
+inline vkb::core::Instance<bindingType> &VulkanSample<bindingType>::get_instance()
 {
 	if constexpr (bindingType == BindingType::Cpp)
 	{
@@ -784,12 +789,12 @@ inline typename VulkanSample<bindingType>::InstanceType &VulkanSample<bindingTyp
 	}
 	else
 	{
-		return reinterpret_cast<vkb::Instance &>(*instance);
+		return reinterpret_cast<vkb::core::InstanceC &>(*instance);
 	}
 }
 
 template <vkb::BindingType bindingType>
-inline typename VulkanSample<bindingType>::InstanceType const &VulkanSample<bindingType>::get_instance() const
+inline vkb::core::Instance<bindingType> const &VulkanSample<bindingType>::get_instance() const
 {
 	if constexpr (bindingType == BindingType::Cpp)
 	{
@@ -797,7 +802,7 @@ inline typename VulkanSample<bindingType>::InstanceType const &VulkanSample<bind
 	}
 	else
 	{
-		return reinterpret_cast<vkb::Instance const &>(*instance);
+		return reinterpret_cast<vkb::core::InstanceC const &>(*instance);
 	}
 }
 
@@ -833,21 +838,21 @@ inline std::vector<typename VulkanSample<bindingType>::LayerSettingType> const &
 }
 
 template <vkb::BindingType bindingType>
-inline typename VulkanSample<bindingType>::RenderContextType const &VulkanSample<bindingType>::get_render_context() const
+inline vkb::rendering::RenderContext<bindingType> const &VulkanSample<bindingType>::get_render_context() const
 {
 	assert(render_context && "Render context is not valid");
 	if constexpr (bindingType == BindingType::Cpp)
 	{
-		return reinterpret_cast<vkb::rendering::HPPRenderContext const &>(*render_context);
+		return *render_context;
 	}
 	else
 	{
-		return *render_context;
+		return reinterpret_cast<vkb::rendering::RenderContextC const &>(*render_context);
 	}
 }
 
 template <vkb::BindingType bindingType>
-inline typename VulkanSample<bindingType>::RenderContextType &VulkanSample<bindingType>::get_render_context()
+inline vkb::rendering::RenderContext<bindingType> &VulkanSample<bindingType>::get_render_context()
 {
 	assert(render_context && "Render context is not valid");
 	if constexpr (bindingType == BindingType::Cpp)
@@ -856,7 +861,7 @@ inline typename VulkanSample<bindingType>::RenderContextType &VulkanSample<bindi
 	}
 	else
 	{
-		return reinterpret_cast<vkb::RenderContext &>(*render_context);
+		return reinterpret_cast<vkb::rendering::RenderContextC &>(*render_context);
 	}
 }
 
@@ -1069,14 +1074,11 @@ inline bool VulkanSample<bindingType>::prepare(const ApplicationOptions &options
 	}
 	else
 	{
-		instance.reset(reinterpret_cast<vkb::core::HPPInstance *>(create_instance().release()));
+		instance.reset(reinterpret_cast<vkb::core::InstanceCpp *>(create_instance().release()));
 	}
 
-	// initialize C++-Bindings default dispatcher, second step
-	VULKAN_HPP_DEFAULT_DISPATCHER.init(instance->get_handle());
-
 	// Getting a valid vulkan surface from the platform
-	surface = static_cast<vk::SurfaceKHR>(window->create_surface(reinterpret_cast<vkb::Instance &>(*instance)));
+	surface = static_cast<vk::SurfaceKHR>(window->create_surface(reinterpret_cast<vkb::core::InstanceC &>(*instance)));
 	if (!surface)
 	{
 		throw std::runtime_error("Failed to create window surface.");
@@ -1091,16 +1093,6 @@ inline bool VulkanSample<bindingType>::prepare(const ApplicationOptions &options
 		gpu.get_mutable_requested_features().textureCompressionASTC_LDR = true;
 	}
 
-	// Request sample required GPU features
-	if constexpr (bindingType == BindingType::Cpp)
-	{
-		request_gpu_features(gpu);
-	}
-	else
-	{
-		request_gpu_features(reinterpret_cast<vkb::PhysicalDevice &>(gpu));
-	}
-
 	// Creating vulkan device, specifying the swapchain extension always
 	// If using VK_EXT_headless_surface, we still create and use a swap-chain
 	{
@@ -1110,6 +1102,18 @@ inline bool VulkanSample<bindingType>::prepare(const ApplicationOptions &options
 		{
 			add_device_extension(VK_KHR_DISPLAY_SWAPCHAIN_EXTENSION_NAME, /*optional=*/true);
 		}
+	}
+
+	// Shaders generated by Slang require a certain SPIR-V environment that can't be satisfied by Vulkan 1.0, so we need to expliclity up that to at least 1.1 and enable some required extensions
+	if (get_shading_language() == ShadingLanguage::SLANG)
+	{
+		if (api_version < VK_API_VERSION_1_1)
+		{
+			api_version = VK_API_VERSION_1_1;
+		}
+		add_device_extension(VK_KHR_SPIRV_1_4_EXTENSION_NAME);
+		add_device_extension(VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME);
+		add_device_extension(VK_KHR_SHADER_DRAW_PARAMETERS_EXTENSION_NAME);
 	}
 
 #ifdef VKB_ENABLE_PORTABILITY
@@ -1150,7 +1154,7 @@ inline bool VulkanSample<bindingType>::prepare(const ApplicationOptions &options
 	}
 	else
 	{
-		device.reset(reinterpret_cast<vkb::core::HPPDevice *>(create_device(reinterpret_cast<vkb::PhysicalDevice &>(gpu)).release()));
+		device.reset(reinterpret_cast<vkb::core::DeviceCpp *>(create_device(reinterpret_cast<vkb::core::PhysicalDeviceC &>(gpu)).release()));
 	}
 
 	// initialize C++-Bindings default dispatcher, optional third step
@@ -1172,12 +1176,15 @@ inline void VulkanSample<bindingType>::create_gui(const Window &window, StatsTyp
 {
 	if constexpr (bindingType == BindingType::Cpp)
 	{
-		gui = std::make_unique<vkb::HPPGui>(*this, window, stats, font_size, explicit_update);
+		gui = std::make_unique<vkb::GuiCpp>(get_render_context(), window, stats, font_size, explicit_update);
 	}
 	else
 	{
-		gui = std::make_unique<vkb::HPPGui>(
-		    *reinterpret_cast<VulkanSampleCpp *>(this), window, reinterpret_cast<vkb::stats::HPPStats const *>(stats), font_size, explicit_update);
+		gui = std::make_unique<vkb::GuiCpp>(reinterpret_cast<vkb::rendering::RenderContextCpp &>(get_render_context()),
+		                                    window,
+		                                    reinterpret_cast<vkb::stats::HPPStats const *>(stats),
+		                                    font_size,
+		                                    explicit_update);
 	}
 }
 
@@ -1210,7 +1217,7 @@ inline void VulkanSample<bindingType>::render_impl(vkb::core::CommandBufferCpp &
 }
 
 template <vkb::BindingType bindingType>
-inline void VulkanSample<bindingType>::request_gpu_features(PhysicalDeviceType &gpu)
+inline void VulkanSample<bindingType>::request_gpu_features(vkb::core::PhysicalDevice<bindingType> &gpu)
 {
 	// To be overridden by sample
 }
@@ -1263,7 +1270,7 @@ inline void VulkanSample<bindingType>::set_high_priority_graphics_queue_enable(b
 }
 
 template <vkb::BindingType bindingType>
-inline void VulkanSample<bindingType>::set_render_context(std::unique_ptr<RenderContextType> &&rc)
+inline void VulkanSample<bindingType>::set_render_context(std::unique_ptr<vkb::rendering::RenderContext<bindingType>> &&rc)
 {
 	if constexpr (bindingType == BindingType::Cpp)
 	{
@@ -1271,7 +1278,7 @@ inline void VulkanSample<bindingType>::set_render_context(std::unique_ptr<Render
 	}
 	else
 	{
-		render_context.reset(reinterpret_cast<vkb::rendering::HPPRenderContext *>(rc.release()));
+		render_context.reset(reinterpret_cast<vkb::rendering::RenderContextCpp *>(rc.release()));
 	}
 }
 
@@ -1307,7 +1314,7 @@ inline void VulkanSample<bindingType>::set_viewport_and_scissor_impl(vkb::core::
                                                                      vk::Extent2D const                &extent)
 {
 	command_buffer.get_handle().setViewport(0, {{0.0f, 0.0f, static_cast<float>(extent.width), static_cast<float>(extent.height), 0.0f, 1.0f}});
-	command_buffer.get_handle().setScissor(0, vk::Rect2D({}, extent));
+	command_buffer.get_handle().setScissor(0, vk::Rect2D{{}, extent});
 }
 
 template <vkb::BindingType bindingType>
@@ -1319,26 +1326,26 @@ inline void VulkanSample<bindingType>::update(float delta_time)
 
 	update_gui(delta_time);
 
-	auto &command_buffer = render_context->begin();
+	auto command_buffer = render_context->begin();
 
 	// Collect the performance data for the sample graphs
 	update_stats(delta_time);
 
-	command_buffer.begin(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
-	stats->begin_sampling(command_buffer);
+	command_buffer->begin(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
+	stats->begin_sampling(*command_buffer);
 
 	if constexpr (bindingType == BindingType::Cpp)
 	{
-		draw(command_buffer, render_context->get_active_frame().get_render_target());
+		draw(*command_buffer, render_context->get_active_frame().get_render_target());
 	}
 	else
 	{
-		draw(reinterpret_cast<vkb::core::CommandBufferC &>(command_buffer),
+		draw(reinterpret_cast<vkb::core::CommandBufferC &>(*command_buffer),
 		     reinterpret_cast<vkb::RenderTarget &>(render_context->get_active_frame().get_render_target()));
 	}
 
-	stats->end_sampling(command_buffer);
-	command_buffer.end();
+	stats->end_sampling(*command_buffer);
+	command_buffer->end();
 
 	render_context->submit(command_buffer);
 }
@@ -1441,8 +1448,5 @@ inline void VulkanSample<bindingType>::update_stats(float delta_time)
 		}
 	}
 }
-
-using VulkanSampleC   = VulkanSample<vkb::BindingType::C>;
-using VulkanSampleCpp = VulkanSample<vkb::BindingType::Cpp>;
 
 }        // namespace vkb

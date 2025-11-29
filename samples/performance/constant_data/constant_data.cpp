@@ -47,7 +47,7 @@ namespace
 /**
  * @brief Helper function to fill the contents of the MVPUniform struct with the transform of the node and the camera view-projection matrix.
  */
-inline MVPUniform fill_mvp(vkb::sg::Node &node, vkb::sg::Camera &camera)
+inline MVPUniform fill_mvp(vkb::scene_graph::NodeC &node, vkb::sg::Camera &camera)
 {
 	MVPUniform mvp;
 
@@ -90,8 +90,8 @@ bool ConstantData::prepare(const vkb::ApplicationOptions &options)
 
 	// If descriptor indexing and its dependencies were enabled, then we can mark the update after bind method as supported
 	if (get_instance().is_enabled(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME) &&
-	    get_device().is_enabled(VK_KHR_MAINTENANCE3_EXTENSION_NAME) &&
-	    get_device().is_enabled(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME))
+	    get_device().is_extension_enabled(VK_KHR_MAINTENANCE3_EXTENSION_NAME) &&
+	    get_device().is_extension_enabled(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME))
 	{
 		methods[Method::UpdateAfterBindDescriptorSets].supported = true;
 	}
@@ -108,9 +108,13 @@ bool ConstantData::prepare(const vkb::ApplicationOptions &options)
 	camera            = dynamic_cast<vkb::sg::PerspectiveCamera *>(&camera_node.get_component<vkb::sg::Camera>());
 
 	// Create the render pipelines
-	push_constant_render_pipeline  = create_render_pipeline<PushConstantSubpass>("constant_data/push_constant.vert", "constant_data/push_constant.frag");
-	descriptor_set_render_pipeline = create_render_pipeline<DescriptorSetSubpass>("constant_data/ubo.vert", "constant_data/ubo.frag");
-	buffer_array_render_pipeline   = create_render_pipeline<BufferArraySubpass>("constant_data/buffer_array.vert", "constant_data/buffer_array.frag");
+
+	// Shader data passing depends on max. push constant size of the implementation
+	auto push_constant_limit = get_device().get_gpu().get_properties().limits.maxPushConstantsSize;
+
+	push_constant_render_pipeline  = create_render_pipeline<PushConstantSubpass>(push_constant_limit >= 256 ? "constant_data/push_constant_large.vert.spv" : "constant_data/push_constant_small.vert.spv", "constant_data/push_constant.frag.spv");
+	descriptor_set_render_pipeline = create_render_pipeline<DescriptorSetSubpass>(push_constant_limit >= 256 ? "constant_data/ubo_large.vert.spv" : "constant_data/ubo_small.vert.spv", "constant_data/ubo.frag.spv");
+	buffer_array_render_pipeline   = create_render_pipeline<BufferArraySubpass>("constant_data/buffer_array.vert.spv", "constant_data/buffer_array.frag.spv");
 
 	// Add a GUI with the stats you want to monitor
 	get_stats().request_stats(std::set<vkb::StatIndex>{vkb::StatIndex::frame_times, vkb::StatIndex::gpu_load_store_cycles});
@@ -119,7 +123,7 @@ bool ConstantData::prepare(const vkb::ApplicationOptions &options)
 	return true;
 }
 
-void ConstantData::request_gpu_features(vkb::PhysicalDevice &gpu)
+void ConstantData::request_gpu_features(vkb::core::PhysicalDeviceC &gpu)
 {
 	if (gpu.get_features().vertexPipelineStoresAndAtomics)
 	{
@@ -292,19 +296,7 @@ void ConstantData::ConstantDataSubpass::prepare()
 	{
 		for (auto &sub_mesh : mesh->get_submeshes())
 		{
-			auto &variant = sub_mesh->get_mut_shader_variant();
-
-			// Copied from vkb::ForwardSubpass
-			variant.add_definitions({"SCENE_MESH_COUNT " + std::to_string(scene.get_components<vkb::sg::SubMesh>().size())});
-			variant.add_definitions({"MAX_LIGHT_COUNT " + std::to_string(MAX_FORWARD_LIGHT_COUNT)});
-			variant.add_definitions(vkb::rendering::light_type_definitions);
-
-			// If struct size is 256 we add a definition so the uniform has more values
-			if (struct_size == 256)
-			{
-				variant.add_definitions({"PUSH_CONSTANT_LIMIT_256"});
-			}
-
+			auto &variant     = sub_mesh->get_mut_shader_variant();
 			auto &vert_module = device.get_resource_cache().request_shader_module(VK_SHADER_STAGE_VERTEX_BIT, get_vertex_shader(), variant);
 			auto &frag_module = device.get_resource_cache().request_shader_module(VK_SHADER_STAGE_FRAGMENT_BIT, get_fragment_shader(), variant);
 		}
@@ -312,7 +304,7 @@ void ConstantData::ConstantDataSubpass::prepare()
 }
 
 void ConstantData::PushConstantSubpass::update_uniform(vkb::core::CommandBufferC &command_buffer,
-                                                       vkb::sg::Node             &node,
+                                                       vkb::scene_graph::NodeC   &node,
                                                        size_t                     thread_index)
 {
 	mvp_uniform = fill_mvp(node, camera);
@@ -349,7 +341,7 @@ void ConstantData::PushConstantSubpass::prepare_push_constants(vkb::core::Comman
 }
 
 void ConstantData::DescriptorSetSubpass::update_uniform(vkb::core::CommandBufferC &command_buffer,
-                                                        vkb::sg::Node             &node,
+                                                        vkb::scene_graph::NodeC   &node,
                                                         size_t                     thread_index)
 {
 	MVPUniform mvp;
@@ -432,17 +424,9 @@ void ConstantData::BufferArraySubpass::draw(vkb::core::CommandBufferC &command_b
 		// Push 128 bytes of data
 		allocation.update(uniforms[i].model, offset + 0);                    // Update bytes 0 - 63
 		allocation.update(uniforms[i].camera_view_proj, offset + 64);        // Update bytes 64 - 127
-
-		offset += 128;
-
-		// If we can push another 128 bytes, push more as this will make the delta more prominent
-		if (struct_size == 256)
-		{
-			allocation.update(uniforms[i].scale, offset);               // Update bytes 128 - 191
-			allocation.update(uniforms[i].padding, offset + 64);        // Update bytes 192 - 255
-
-			offset += 128;
-		}
+		allocation.update(uniforms[i].scale, offset + 128);                  // Update bytes 128 - 191
+		allocation.update(uniforms[i].padding, offset + 192);                // Update bytes 192 - 255
+		offset += 256;
 	}
 
 	command_buffer.bind_buffer(allocation.get_buffer(), allocation.get_offset(), allocation.get_size(), 0, 1, 0);
@@ -457,7 +441,7 @@ void ConstantData::BufferArraySubpass::draw(vkb::core::CommandBufferC &command_b
 }
 
 void ConstantData::BufferArraySubpass::update_uniform(vkb::core::CommandBufferC &command_buffer,
-                                                      vkb::sg::Node             &node,
+                                                      vkb::scene_graph::NodeC   &node,
                                                       size_t                     thread_index)
 {
 	/**

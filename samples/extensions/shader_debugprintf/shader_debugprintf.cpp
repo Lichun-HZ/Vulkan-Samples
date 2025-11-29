@@ -71,7 +71,7 @@ ShaderDebugPrintf::~ShaderDebugPrintf()
 	}
 }
 
-void ShaderDebugPrintf::request_gpu_features(vkb::PhysicalDevice &gpu)
+void ShaderDebugPrintf::request_gpu_features(vkb::core::PhysicalDeviceC &gpu)
 {
 	auto const &supportedFeatures = gpu.get_features();
 	auto       &requestedFeatures = gpu.get_mutable_requested_features();
@@ -343,8 +343,8 @@ void ShaderDebugPrintf::prepare_pipelines()
 	pipeline_create_info.stageCount          = static_cast<uint32_t>(shader_stages.size());
 	pipeline_create_info.pStages             = shader_stages.data();
 
-	shader_stages[0] = load_shader("shader_debugprintf", "scene.vert", VK_SHADER_STAGE_VERTEX_BIT);
-	shader_stages[1] = load_shader("shader_debugprintf", "scene.frag", VK_SHADER_STAGE_FRAGMENT_BIT);
+	shader_stages[0] = load_shader("shader_debugprintf", "scene.vert.spv", VK_SHADER_STAGE_VERTEX_BIT);
+	shader_stages[1] = load_shader("shader_debugprintf", "scene.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
 
 	// skysphere pipeline (background cube)
 	rasterization_state.cullMode = VK_CULL_MODE_BACK_BIT;
@@ -421,7 +421,7 @@ bool ShaderDebugPrintf::prepare(const vkb::ApplicationOptions &options)
 }
 
 // This sample overrides the instance creation part of the framework to chain in additional structures
-std::unique_ptr<vkb::Instance> ShaderDebugPrintf::create_instance()
+std::unique_ptr<vkb::core::InstanceC> ShaderDebugPrintf::create_instance()
 {
 	auto debugprintf_api_version = VK_API_VERSION_1_1;
 
@@ -548,7 +548,7 @@ std::unique_ptr<vkb::Instance> ShaderDebugPrintf::create_instance()
 
 	volkLoadInstance(vulkan_instance);
 
-	return std::make_unique<vkb::Instance>(vulkan_instance, enabled_extensions);
+	return std::make_unique<vkb::core::InstanceC>(vulkan_instance, enabled_extensions);
 }
 
 void ShaderDebugPrintf::render(float delta_time)
